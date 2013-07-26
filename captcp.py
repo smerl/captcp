@@ -3783,7 +3783,7 @@ class StatisticMod(Mod):
                 sc.user_data["_tl_pkt_sizes"].append(transport_len)
                 if sc.user_data["_tl_ia_last"] is not None:
                     delta = ts - sc.user_data["_tl_ia_last"]
-                    sc.user_data["_tl_iats"].append((delta.seconds*1000000 + delta.microseconds)/1000)
+                    sc.user_data["_tl_iats"].append(np.ceil((delta.seconds*1000000.0 + delta.microseconds)/1000.0))
                 sc.user_data["_tl_ia_last"] = ts
             return
 
