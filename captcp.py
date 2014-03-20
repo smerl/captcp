@@ -4848,6 +4848,109 @@ class SocketStatisticsMod(Mod):
         self.logger.warning("Data generated in %s/" % (self.opts.outputdir))
 
 
+class DataMod(Mod):
+    def initialize(self):
+        self.color = RainbowColor(mode=RainbowColor.ANSI)
+        self.parse_local_options()
+        self.capture_level = CaptureLevel.NETWORK_LAYER    
+        self.highest_seq = 0
+        self.retransmissions = 0
+        self.received_packets = 0
+        self.received_bytes = 0
+        self.window_size = 0
+        self.interval_start = 0
+        self.interval_length = 1000
+
+    def parse_local_options(self):
+        parser = optparse.OptionParser()
+        parser.add_option( "-v", "--verbose", dest="loglevel", default=None,
+                type="string", help="set the loglevel (debug, info, warning, error)")
+        parser.add_option( "-f", "--data-flow", dest="connections", default=None,
+                type="string", help="specify the number of relevant ID's")
+
+        self.opts, args = parser.parse_args(sys.argv[0:])
+        self.set_opts_logevel()
+
+        if len(args) < 3:
+            self.logger.error("no pcap file argument given, exiting")
+            sys.exit(ExitCodes.EXIT_CMD_LINE)
+
+        self.captcp.print_welcome()
+        self.captcp.pcap_file_path = args[2]
+        self.logger.info("pcap file: %s" % (self.captcp.pcap_file_path))
+
+        if not self.opts.connections:
+            self.logger.error("No data flow specified! Call \"captcp statistic for valid ID's\"")
+            sys.exit(ExitCodes.EXIT_CMD_LINE)
+
+        try:
+            (self.connection_id, self.local_flow_id) = self.opts.connections.split('.')
+        except ValueError:
+            self.logger.error("You specified a connection not a flow")
+            sys.exit(ExitCodes.EXIT_CMD_LINE)
+
+        if int(self.local_flow_id) == 1:
+            self.remote_flow_id = 2
+        elif int(self.local_flow_id) == 2:
+            self.remote_flow_id = 1
+        else:
+            raise ArgumentException("sub flow must be 1 or 2")
+
+
+    def pre_process_packet(self, ts, packet):
+        if not PacketInfo.is_tcp(packet):
+            return
+        
+        if not self.cc.is_packet_connection(packet, int(self.connection_id)):
+            return False
+
+        ms = time.mktime(ts.timetuple()) * 1000 + ts.microsecond / 1000
+
+        if self.interval_start == 0:
+            self.interval_start = ms
+            print("TS;TD;PKTS_RECVD;BYTES_RECVD;WIN;RETR;PKTS/s;Mbit/s;RETR/s")
+
+        if ms - self.interval_start >= self.interval_length:
+            interval_length = (ms - self.interval_start) / 1000.0
+            speed_packets = self.received_packets / interval_length
+            speed_bytes = self.received_bytes / interval_length * 8 / 1024.0 / 1024.0
+            speed_retrans = self.retransmissions / interval_length 
+            print("%d;%.2f;%d;%d;%d;%d;%.2f;%.2f;%.2f" % (ms/1000.0, interval_length, self.received_packets, self.received_bytes, self.window_size, self.retransmissions, speed_packets, speed_bytes, speed_retrans))
+            self.retransmissions = 0
+            self.received_packets = 0
+            self.received_bytes = 0
+            self.window_size = 0
+            self.interval_start = ms
+
+        tpi = TcpPacketInfo(packet)
+        sub_connection = self.cc.sub_connection_by_packet(packet)
+
+        if sub_connection.sub_connection_id == int(self.local_flow_id):
+            # sent packets
+            #print("no")
+            return
+        else:
+            # received packets
+            if tpi.seq >= self.highest_seq:
+                self.received_packets += 1
+                self.received_bytes += len(packet.data)
+                if self.received_packets == 1:
+                    self.window_size = tpi.win
+                else:
+                    self.window_size = int(((self.window_size * (self.received_packets - 1)) + tpi.win) / float(self.received_packets))
+                # print("%d: ACK: %d, LEN: %d" % (tpi.seq, tpi.ack, len(packet)))
+            else:
+                self.retransmissions += 1
+                #print(time.mktime(ts.timetuple()) * 1000 + ts.microsecond / 1000)
+                #print("%s - %d: ACK: %d, LEN: %d" % (ts, tpi.seq, tpi.ack, len(packet)))
+
+
+        if len(packet.data.data) > 0:
+            self.highest_seq = max(self.highest_seq, tpi.seq)
+        #print(sub_connection.sub_connection_id)
+
+
+
 class Captcp:
 
     modes = {
@@ -4865,7 +4968,8 @@ class Captcp:
        "stacktrace":      [ "StackTraceMod", "Hook into Linux Kernel to trace cwnd, ssthresh, ..." ],
        "sound":           [ "SoundMod", "Play sound based on payload/ack packets" ],
        "animation":       [ "ConnectionAnimationMod", "Generate animation (html) of packet flow" ],
-       "socketstatistic": [ "SocketStatisticsMod", "Graph output (mem, rtt, ...) from ss(8) over time" ]
+       "socketstatistic": [ "SocketStatisticsMod", "Graph output (mem, rtt, ...) from ss(8) over time" ],
+       "data":            [ "DataMod", "Display statistical data for each time interval"]
             }
 
     def __init__(self):
