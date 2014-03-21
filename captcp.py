@@ -660,7 +660,6 @@ class TcpPacketInfo(PacketInfo):
         self.urp = int(self.tcp.urp)
         self.sum = int(self.tcp.sum)
 
-        self.parse_tcp_options()
 
     def caller(self):
         stack = inspect.stack()
@@ -4852,21 +4851,118 @@ class DataMod(Mod):
     def initialize(self):
         self.color = RainbowColor(mode=RainbowColor.ANSI)
         self.parse_local_options()
-        self.capture_level = CaptureLevel.NETWORK_LAYER    
-        self.highest_seq = 0
-        self.retransmissions = 0
-        self.received_packets = 0
-        self.received_bytes = 0
-        self.window_size = 0
-        self.interval_start = 0
-        self.interval_length = 1000
+        if self.opts.persecond:
+            per_second = '/s'
+        else:
+            per_second = ''        
+        self.capture_level = CaptureLevel.NETWORK_LAYER
+        self.initial_data = {
+            'packets': 0,
+            'bytes': 0,
+            'window_min': 0,
+            'window_sum': 0,
+            'window_avg': 0,
+            'window_max': 0,
+            'retransmissions': 0,
+            'max_sequence': 0
+        }    
+        self.data = {
+            1: {
+                'packets': 0,
+                'bytes': 0,
+                'window_min': 0,
+                'window_sum': 0,
+                'window_avg': 0,
+                'window_max': 0,
+                'retransmissions': 0,
+                'max_sequence': 0
+            },      
+            2: {
+                'packets': 0,
+                'bytes': 0,
+                'window_min': 0,
+                'window_sum': 0,
+                'window_avg': 0,
+                'window_max': 0,
+                'retransmissions': 0,
+                'max_sequence': 0
+            }
+        } 
+        self.data_total = {
+            1: {
+                'packets': 0,
+                'bytes': 0,
+                'window_min': 0,
+                'window_sum': 0,
+                'window_avg': 0,
+                'window_max': 0,
+                'retransmissions': 0
+            },
+            2: {
+                'packets': 0,
+                'bytes': 0,
+                'window_min': 0,
+                'window_sum': 0,
+                'window_avg': 0,
+                'window_max': 0,
+                'retransmissions': 0
+            }            
+        }
+        self.wanted_fields = ['packets', 'bytes', 'window_min', 'window_avg', 'window_max', 'retransmissions']
+        self.wanted_fields_titles = ['Packets' + per_second, self.opts.unit + per_second, 'min. WS', 'avg. WS', 'max. WS', 'Retr.']
+        self.total_data_len = 0
+        self.start_time = { 1: False, 2: False }
+        self.last_sample = { 1: False, 2: False }
+        self.window_scale = { 1:1, 2:1 }
+        self.sc = { 1:None, 2:None }
+        self.speed = { 
+            'all': { 1: [], 2: [] },
+            'threshold': { 1: [], 2: [] }
+        }
+
+
+        if self.opts.csv:
+            self.check_options()
+            self.create_data_files()            
+            self.data_file.write(self.opts.delimiter.join(["Flow","Time"] + self.wanted_fields_titles) + "\n")
+        else:
+            output = "Flow  Time  "
+            output = "Flow  Time  " + "".join([ "  %9s" % title for title in self.wanted_fields_titles]) + "\n"
+            sys.stdout.write(output)
+
+    def check_options(self):
+        if not self.opts.outputdir:
+            self.logger.error("No output directory specified: --output-dir")
+            sys.exit(ExitCodes.EXIT_CMD_LINE)
+
+        if not os.path.exists(self.opts.outputdir):
+            self.logger.error("Not a valid directory: \"%s\"" %
+                    (self.opts.outputdir))
+            sys.exit(ExitCodes.EXIT_CMD_LINE)
 
     def parse_local_options(self):
         parser = optparse.OptionParser()
         parser.add_option( "-v", "--verbose", dest="loglevel", default=None,
                 type="string", help="set the loglevel (debug, info, warning, error)")
+        parser.add_option( "-m", "--mode", dest="mode", default="goodput",
+                type="string",
+                help="layer where the data len measurement is taken (default: goodput)")        
         parser.add_option( "-f", "--data-flow", dest="connections", default=None,
                 type="string", help="specify the number of relevant ID's")
+        parser.add_option( "-s", "--sample-length", dest="samplelength", default=1.0,
+                type="float", help="length in seconds (float) where data is accumulated (1.0)")
+        parser.add_option( "-p", "--per-second", dest="persecond", default=False,
+                action="store_true", help="data is normalized as per-second average")        
+        parser.add_option( "-u", "--unit", dest="unit", default="byte",
+                type="string", help="unit: bit, kilobit, megabit, gigabit, byte, kilobyte, ...")        
+        parser.add_option("-t", "--csv", dest="csv",  default=False,
+                action="store_true", help="don't use stdio, write csv file")
+        parser.add_option( "-o", "--output-dir", dest="outputdir", default=None,
+                type="string", help="specify the output directory")
+        parser.add_option( "-d", "--delimiter", dest="delimiter", default=";",
+                type="string", help="specify the csv delimiter")        
+        parser.add_option( "-i", "--ignore", dest="threshold", default=2.0,
+                type="float", help="seconds to ignore at start of measurement (for throughput summary)")        
 
         self.opts, args = parser.parse_args(sys.argv[0:])
         self.set_opts_logevel()
@@ -4896,6 +4992,10 @@ class DataMod(Mod):
         else:
             raise ArgumentException("sub flow must be 1 or 2")
 
+        if self.opts.samplelength != 1.0 and not self.opts.persecond:
+            self.logger.warning("WARNING: graph is scaled to %s per %.1f seconds" %
+                                (self.opts.unit, self.opts.samplelength))
+            self.logger.warning("Use --per-second (-p) option if you want per-second average")
 
     def pre_process_packet(self, ts, packet):
         if not PacketInfo.is_tcp(packet):
@@ -4904,51 +5004,154 @@ class DataMod(Mod):
         if not self.cc.is_packet_connection(packet, int(self.connection_id)):
             return False
 
-        ms = time.mktime(ts.timetuple()) * 1000 + ts.microsecond / 1000
-
-        if self.interval_start == 0:
-            self.interval_start = ms
-            print("TS;TD;PKTS_RECVD;BYTES_RECVD;WIN;RETR;PKTS/s;Mbit/s;RETR/s")
-
-        if ms - self.interval_start >= self.interval_length:
-            interval_length = (ms - self.interval_start) / 1000.0
-            speed_packets = self.received_packets / interval_length
-            speed_bytes = self.received_bytes / interval_length * 8 / 1024.0 / 1024.0
-            speed_retrans = self.retransmissions / interval_length 
-            print("%d;%.2f;%d;%d;%d;%d;%.2f;%.2f;%.2f" % (ms/1000.0, interval_length, self.received_packets, self.received_bytes, self.window_size, self.retransmissions, speed_packets, speed_bytes, speed_retrans))
-            self.retransmissions = 0
-            self.received_packets = 0
-            self.received_bytes = 0
-            self.window_size = 0
-            self.interval_start = ms
-
-        tpi = TcpPacketInfo(packet)
         sub_connection = self.cc.sub_connection_by_packet(packet)
+        flow_id = sub_connection.sub_connection_id
 
-        if sub_connection.sub_connection_id == int(self.local_flow_id):
-            # sent packets
-            #print("no")
-            return
+        if self.opts.mode == "goodput" or self.opts.mode == "application-layer":
+            data_len = len(packet.data.data)
+        elif self.opts.mode == "transport-layer":
+            data_len = len(packet.data)
+        elif self.opts.mode == "network-layer":
+            data_len = len(packet)
+        elif self.opts.mode == "link-layer":
+            data_len = len(packet) + Info.ETHERNET_HEADER_LEN
         else:
-            # received packets
-            if tpi.seq >= self.highest_seq:
-                self.received_packets += 1
-                self.received_bytes += len(packet.data)
-                if self.received_packets == 1:
-                    self.window_size = tpi.win
-                else:
-                    self.window_size = int(((self.window_size * (self.received_packets - 1)) + tpi.win) / float(self.received_packets))
-                # print("%d: ACK: %d, LEN: %d" % (tpi.seq, tpi.ack, len(packet)))
+            raise NotImplementedException("mode \"%s\" not supported" %
+                    (self.opts.mode))
+
+        pi = TcpPacketInfo(packet)
+
+        if pi.is_syn_flag():
+            pi.parse_tcp_options()
+            if pi.options['wsc']:
+                self.window_scale[flow_id] = 2**pi.options['wsc']
             else:
-                self.retransmissions += 1
-                #print(time.mktime(ts.timetuple()) * 1000 + ts.microsecond / 1000)
-                #print("%s - %d: ACK: %d, LEN: %d" % (ts, tpi.seq, tpi.ack, len(packet)))
+                self.window_scale[flow_id] = 1
+
+        sequence_number = int(pi.seq)
+        current_window = self.window_scale[flow_id] * pi.win
+
+        if not self.start_time[flow_id]:
+            self.start_time[flow_id] = ts
+            self.last_sample[flow_id] = 0.0
+
+        if sequence_number >= self.data[flow_id]['max_sequence']:
+            self.data[flow_id]['packets'] += 1
+            self.data[flow_id]['bytes'] += data_len
+            self.data_total[flow_id]['packets'] += 1
+            self.data_total[flow_id]['bytes'] += data_len
+            # if flow_id == 1:
+                #print("min: %d, avg: %d, max: %d, current: %d"%(self.data[flow_id]['window_min'],self.data[flow_id]['window_avg'],self.data[flow_id]['window_max'],current_window))
+            if self.data[flow_id]['packets'] == 1:
+                self.data[flow_id]['window_min'] = current_window
+                self.data[flow_id]['window_sum'] = current_window
+                self.data[flow_id]['window_max'] = current_window
+            else:
+                self.data[flow_id]['window_min'] = min(self.data[flow_id]['window_min'], current_window)
+                self.data[flow_id]['window_sum'] += current_window
+                self.data[flow_id]['window_max'] = max(self.data[flow_id]['window_max'], current_window)
+            if self.data_total[flow_id]['packets'] == 1:
+                self.sc[flow_id] = sub_connection
+                self.data_total[flow_id]['window_min'] = current_window
+                self.data_total[flow_id]['window_sum'] = current_window
+                self.data_total[flow_id]['window_max'] = current_window
+            else:
+                self.data_total[flow_id]['window_min'] = min(self.data_total[flow_id]['window_min'], current_window)
+                self.data_total[flow_id]['window_sum'] += current_window
+                self.data_total[flow_id]['window_max'] = max(self.data_total[flow_id]['window_max'], current_window)
+        else:
+            self.data[flow_id]['retransmissions'] += 1
+            self.data_total[flow_id]['retransmissions'] += 1
+
+        timediff = Utils.ts_tofloat(ts - self.start_time[flow_id])
+
+        if timediff >= self.last_sample[flow_id] + self.opts.samplelength:
+           # fill silent periods between a samplelength
+            while self.last_sample[flow_id] + (self.opts.samplelength * 2) < timediff:
+                self.last_sample[flow_id] += self.opts.samplelength
+                self.output_data(self.last_sample[flow_id], self.initial_data, flow_id)
+
+            self.output_data(self.last_sample[flow_id] + self.opts.samplelength, self.data[flow_id], flow_id)
+            self.data[flow_id]['packets']  = 0
+            self.data[flow_id]['bytes']  = 0
+            self.data[flow_id]['retransmissions'] = 0
+
+            self.last_sample[flow_id] += self.opts.samplelength
 
 
         if len(packet.data.data) > 0:
-            self.highest_seq = max(self.highest_seq, tpi.seq)
-        #print(sub_connection.sub_connection_id)
+            self.data[flow_id]['max_sequence'] = max(self.data[flow_id]['max_sequence'], sequence_number)        
 
+    def output_data(self, time, data, flow_id):
+        if data['packets'] > 0:
+            data['window_avg'] = data['window_sum'] / data['packets']  
+        else:
+            data['window_avg'] = 0
+
+        throughput_per_second = U.byte_to_unit(data['bytes'] / self.opts.samplelength, self.opts.unit)
+        if self.opts.persecond:
+            data['bytes'] = throughput_per_second
+            data['packets'] = data['packets'] / self.opts.samplelength
+        else:
+            data['bytes'] = U.byte_to_unit(data['bytes'], self.opts.unit)
+
+        self.speed['all'][flow_id].append(throughput_per_second)
+        if time >= self.opts.threshold:
+            self.speed['threshold'][flow_id].append(throughput_per_second)
+
+        if self.opts.csv:
+            self.data_file.write(self.opts.delimiter.join([str(flow_id), str(time)] + ["%.2f" % data[field] for field in self.wanted_fields]) + "\n")
+        else:
+            output = "%4d %5.1f   " % (flow_id, time) + " ".join(["%10.1f" % data[field] for field in self.wanted_fields])
+            sys.stdout.write(output + "\n")
+
+    def create_data_files(self):
+        self.data_filepath = \
+                "%s/%s" % (self.opts.outputdir, "data.csv")
+        self.data_file = open(self.data_filepath, 'w')
+
+    def close_data_files(self):
+        self.data_file.close()
+
+    def process_final(self):
+        if self.opts.csv:
+            self.data_file.write("\n\nSummary\n=======\n")
+            fields=["Flow", "Time Spent", "Packets", self.opts.unit, self.opts.unit + "/s", "min. %s/s" % self.opts.unit, "avg. %s/s" % self.opts.unit, "max. %s/s" % self.opts.unit, "min. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "avg. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "max. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "min. WS", "avg. WS", "max. WS", "Retransmissions"]
+            self.data_file.write(self.opts.delimiter.join(fields) + "\n")
+        else:
+            sys.stdout.write("\n\nSummary\n=======\n")
+
+        for flow_id in [1,2]:
+            speed_all_min = min(self.speed['all'][flow_id])
+            speed_all_avg = reduce(lambda x, y: x + y, self.speed['all'][flow_id]) / len(self.speed['all'][flow_id])
+            speed_all_max = max(self.speed['all'][flow_id])
+            speed_threshold_min = min(self.speed['threshold'][flow_id])
+            speed_threshold_avg = reduce(lambda x, y: x + y, self.speed['threshold'][flow_id]) / len(self.speed['threshold'][flow_id])
+            speed_threshold_max = max(self.speed['threshold'][flow_id])
+            data = self.data_total[flow_id]
+            data['window_avg'] = data['window_sum'] / data['packets']
+            if self.opts.csv:
+                data=[flow_id, self.last_sample[flow_id], U.byte_to_unit(data['bytes'], self.opts.unit), U.byte_to_unit(data['bytes'] / self.last_sample[flow_id], self.opts.unit), speed_all_min, speed_all_avg, speed_all_max, speed_threshold_min, speed_threshold_avg, speed_threshold_max, data['window_min'], data['window_avg'], data['window_max'], data['retransmissions']]
+                self.data_file.write(self.opts.delimiter.join([str(x) for x in data]) + "\n")
+            else:
+                sys.stdout.write("Flow:  %s\n" % self.sc[flow_id])
+                sys.stdout.write("  Time spent:          %9.1f\n" % self.last_sample[flow_id])
+                sys.stdout.write("  Packets:             %9.1f\n" % data['packets'])
+                sys.stdout.write("  %s:%s%15.1f\n" % (self.opts.unit, ' '*(14-len(self.opts.unit)), U.byte_to_unit(data['bytes'], self.opts.unit)))
+                sys.stdout.write("  %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(12-len(self.opts.unit)), U.byte_to_unit(data['bytes'] / self.last_sample[flow_id], self.opts.unit)))
+                sys.stdout.write("  min. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_min))
+                sys.stdout.write("  avg. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_avg))
+                sys.stdout.write("  max. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_max))
+                sys.stdout.write("  min. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_min, self.opts.threshold))
+                sys.stdout.write("  avg. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_avg, self.opts.threshold))
+                sys.stdout.write("  max. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_max, self.opts.threshold))
+                sys.stdout.write("  min. WS (byte):      %9.1f\n" % data['window_min'])
+                sys.stdout.write("  avg. WS (byte):      %9.1f\n" % data['window_avg'])
+                sys.stdout.write("  max. WS (byte):      %9.1f\n" % data['window_max'])
+                sys.stdout.write("  Retransmissions:      %8.1f\n" % data['retransmissions'])
+                sys.stdout.write("\n")
+        if self.opts.csv:
+            self.close_data_files()                
 
 
 class Captcp:
