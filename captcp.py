@@ -4981,16 +4981,19 @@ class DataMod(Mod):
 
         try:
             (self.connection_id, self.local_flow_id) = self.opts.connections.split('.')
+            self.flows = [int(self.local_flow_id)]
+            if int(self.local_flow_id) == 1:
+                self.remote_flow_id = 2
+            elif int(self.local_flow_id) == 2:
+                self.remote_flow_id = 1
+            else:
+                raise ArgumentException("sub flow must be 1 or 2")
         except ValueError:
-            self.logger.error("You specified a connection not a flow")
-            sys.exit(ExitCodes.EXIT_CMD_LINE)
+            self.connection_id = self.opts.connections
+            self.local_flow_id = False
+            self.flows = [1, 2]
 
-        if int(self.local_flow_id) == 1:
-            self.remote_flow_id = 2
-        elif int(self.local_flow_id) == 2:
-            self.remote_flow_id = 1
-        else:
-            raise ArgumentException("sub flow must be 1 or 2")
+        
 
         if self.opts.samplelength != 1.0 and not self.opts.persecond:
             self.logger.warning("WARNING: graph is scaled to %s per %.1f seconds" %
@@ -4999,13 +5002,15 @@ class DataMod(Mod):
 
     def pre_process_packet(self, ts, packet):
         if not PacketInfo.is_tcp(packet):
-            return
+            return False
         
         if not self.cc.is_packet_connection(packet, int(self.connection_id)):
             return False
 
         sub_connection = self.cc.sub_connection_by_packet(packet)
         flow_id = sub_connection.sub_connection_id
+        if not flow_id in self.flows:
+            return False
 
         if self.opts.mode == "goodput" or self.opts.mode == "application-layer":
             data_len = len(packet.data.data)
@@ -5121,7 +5126,8 @@ class DataMod(Mod):
         else:
             sys.stdout.write("\n\nSummary\n=======\n")
 
-        for flow_id in [1,2]:
+        for flow_id in self.flows:
+            flow_id = int(flow_id)
             speed_all_min = min(self.speed['all'][flow_id])
             speed_all_avg = reduce(lambda x, y: x + y, self.speed['all'][flow_id]) / len(self.speed['all'][flow_id])
             speed_all_max = max(self.speed['all'][flow_id])
