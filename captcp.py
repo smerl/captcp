@@ -5091,8 +5091,10 @@ class DataMod(Mod):
     def output_data(self, time, data, flow_id):
         if data['packets'] > 0:
             data['window_avg'] = data['window_sum'] / data['packets']  
+            data['retransmissions_percent'] = data['retransmissions'] / data['packets'] * 100.0
         else:
             data['window_avg'] = 0
+            data['retransmissions_percent'] = 0
 
         throughput_per_second = U.byte_to_unit(data['bytes'] / self.opts.samplelength, self.opts.unit)
         if self.opts.persecond:
@@ -5101,7 +5103,6 @@ class DataMod(Mod):
         else:
             data['bytes'] = U.byte_to_unit(data['bytes'], self.opts.unit)
 
-        data['retransmissions_percent'] = data['retransmissions'] / data['packets'] * 100.0
         self.flows[flow_id]['speed_all'].append(throughput_per_second)
         if time >= self.opts.threshold:
             self.flows[flow_id]['speed_threshold'].append(throughput_per_second)
