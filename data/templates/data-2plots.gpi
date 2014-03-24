@@ -1,0 +1,19 @@
+set terminal postscript eps enhanced color 
+set output "$PLOTFILE"
+set title "$TITLE"
+set datafile separator "$SEPARATOR"
+set tics out
+set autoscale  y
+set ytics nomirror
+set grid x y 
+
+set style line 1 lc rgb '#ff0000' lt 1 lw 2 pt 5
+set style line 2 lc rgb '#0000ff' lt 1 lw 2 pt 9
+set style line 3 lc rgb '#000000' lt 1 lw 2
+
+set xlabel "Time [seconds]"
+set ylabel "$YLABEL" tc ls 3
+
+plot \
+     "$DATAFILE1" using 2:$COL1 title '$UNIT1'  with linespoints ls 1,\
+     "$DATAFILE2" using 2:$COL2 title '$UNIT2'  with linespoints ls 2 

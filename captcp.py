@@ -1040,7 +1040,7 @@ class TemplateMod(Mod):
         for i in self.db:
             if i.type == TemplateMod.TYPE_MAKEFILE:
                 mak.append(i)
-            elif i.type == TemplateMod.TYPE_GNUPLOT:
+            elif i.type == ateMod.TYPE_GNUPLOT:
                 gpi.append(i)
             else:
                 continue
@@ -4864,19 +4864,11 @@ class DataMod(Mod):
             'window_max': 0,
             'retransmissions': 0,
             'max_sequence': 0
-        }    
-        self.data = {
-            1: {
-                'packets': 0,
-                'bytes': 0,
-                'window_min': 0,
-                'window_sum': 0,
-                'window_avg': 0,
-                'window_max': 0,
-                'retransmissions': 0,
-                'max_sequence': 0
-            },      
-            2: {
+        }
+        self.data = {}
+        self.data_total = {}
+        for flow_id in self.flows:
+            self.data[flow_id] = {
                 'packets': 0,
                 'bytes': 0,
                 'window_min': 0,
@@ -4886,45 +4878,58 @@ class DataMod(Mod):
                 'retransmissions': 0,
                 'max_sequence': 0
             }
-        } 
-        self.data_total = {
-            1: {
-                'packets': 0,
-                'bytes': 0,
-                'window_min': 0,
-                'window_sum': 0,
-                'window_avg': 0,
-                'window_max': 0,
-                'retransmissions': 0
-            },
-            2: {
-                'packets': 0,
-                'bytes': 0,
-                'window_min': 0,
-                'window_sum': 0,
-                'window_avg': 0,
-                'window_max': 0,
-                'retransmissions': 0
+            self.flows[flow_id] = {
+                'name': None,
+                'start_time': False,
+                'last_sample': False,
+                'window_scale': False,
+                'speed_all': [],
+                'speed_threshold': [],
+                'csv_name': 'data-flow-%d.csv'%flow_id,
+                'datafile': None,
+                'datasummaryfile': None
             }            
+            self.data_total[flow_id] = {
+                'packets': 0,
+                'bytes': 0,
+                'window_min': 0,
+                'window_sum': 0,
+                'window_avg': 0,
+                'window_max': 0,
+                'retransmissions': 0
+            }
+
+        self.wanted_fields = {
+            'names': [
+                'packets', 
+                'bytes', 
+                'window_min', 
+                'window_avg', 
+                'window_max', 
+                'retransmissions',
+                'retransmissions_percent'
+            ],
+            'titles': [
+                'Packets' + per_second, 
+                self.opts.unit + per_second, 
+                'min. WS', 
+                'avg. WS', 
+                'max. WS', 
+                'Retr.',
+                'Retr. %'
+            ]
         }
-        self.wanted_fields = ['packets', 'bytes', 'window_min', 'window_avg', 'window_max', 'retransmissions']
-        self.wanted_fields_titles = ['Packets' + per_second, self.opts.unit + per_second, 'min. WS', 'avg. WS', 'max. WS', 'Retr.']
-        self.start_time = { 1: False, 2: False }
-        self.last_sample = { 1: False, 2: False }
-        self.window_scale = { 1:1, 2:1 }
-        self.sc = { 1:None, 2:None }
-        self.speed = { 
-            'all': { 1: [], 2: [] },
-            'threshold': { 1: [], 2: [] }
-        }
+        self.summary_file = None
 
         if self.opts.csv:
             self.check_options()
-            self.create_data_files()            
-            self.data_file.write(self.opts.delimiter.join(["Flow","Time"] + self.wanted_fields_titles) + "\n")
+            self.create_data_files()      
+            for flow_id in self.flows:      
+                self.flows[flow_id]['datafile'].write(self.opts.delimiter.join(["Flow","Time"] + self.wanted_fields['titles']) + "\n")
         else:
-            output = "Flow  Time  " + "".join([ "  %9s" % title for title in self.wanted_fields_titles]) + "\n"
+            output = "Flow  Time  " + "".join([ "  %9s" % title for title in self.wanted_fields['titles']]) + "\n"
             sys.stdout.write(output)
+
 
     def check_options(self):
         if not self.opts.outputdir:
@@ -4943,7 +4948,7 @@ class DataMod(Mod):
         parser.add_option( "-m", "--mode", dest="mode", default="goodput",
                 type="string",
                 help="layer where the data len measurement is taken (default: goodput)")        
-        parser.add_option( "-f", "--data-flow", dest="connections", default=None,
+        parser.add_option( "-f", "--data-flow", dest="connections", default='1',
                 type="string", help="specify the number of relevant ID's")
         parser.add_option( "-s", "--sample-length", dest="samplelength", default=1.0,
                 type="float", help="length in seconds (float) where data is accumulated (1.0)")
@@ -4957,8 +4962,10 @@ class DataMod(Mod):
                 type="string", help="specify the output directory")
         parser.add_option( "-d", "--delimiter", dest="delimiter", default=";",
                 type="string", help="specify the csv delimiter")        
-        parser.add_option( "-i", "--ignore", dest="threshold", default=2.0,
+        parser.add_option( "-x", "--skip", dest="threshold", default=2.0,
                 type="float", help="seconds to ignore at start of measurement (for throughput summary)")        
+        parser.add_option( "-i", "--init", dest="init",  default=False,
+                action="store_true", help="create Gnuplot templates and Makefile in output-dir")
 
         self.opts, args = parser.parse_args(sys.argv[0:])
         self.set_opts_logevel()
@@ -4977,17 +4984,14 @@ class DataMod(Mod):
 
         try:
             (self.connection_id, self.local_flow_id) = self.opts.connections.split('.')
-            self.flows = [int(self.local_flow_id)]
-            if int(self.local_flow_id) == 1:
-                self.remote_flow_id = 2
-            elif int(self.local_flow_id) == 2:
-                self.remote_flow_id = 1
+            if int(self.local_flow_id) in [1, 2]:
+                self.flows = {int(self.local_flow_id): {}}
             else:
                 raise ArgumentException("sub flow must be 1 or 2")
         except ValueError:
             self.connection_id = self.opts.connections
+            self.flows = {1: {}, 2: {}}
             self.local_flow_id = False
-            self.flows = [1, 2]
 
         if self.opts.samplelength != 1.0 and not self.opts.persecond:
             self.logger.warning("WARNING: graph is scaled to %s per %.1f seconds" %
@@ -5027,16 +5031,16 @@ class DataMod(Mod):
         if pi.is_syn_flag():
             pi.parse_tcp_options()
             if pi.options['wsc']:
-                self.window_scale[flow_id] = 2**pi.options['wsc']
+                self.flows[flow_id]['window_scale'] = 2**pi.options['wsc']
             else:
-                self.window_scale[flow_id] = 1
+                self.flows[flow_id]['window_scale'] = 1
 
         sequence_number = int(pi.seq)
-        current_window = self.window_scale[flow_id] * pi.win
+        current_window = self.flows[flow_id]['window_scale'] * pi.win
 
-        if not self.start_time[flow_id]:
-            self.start_time[flow_id] = ts
-            self.last_sample[flow_id] = 0.0
+        if not self.flows[flow_id]['start_time']:
+            self.flows[flow_id]['start_time'] = ts
+            self.flows[flow_id]['last_sample'] = 0.0
 
         # Only count data for new packets
         if sequence_number >= self.data[flow_id]['max_sequence']:
@@ -5053,7 +5057,7 @@ class DataMod(Mod):
                 self.data[flow_id]['window_sum'] += current_window
                 self.data[flow_id]['window_max'] = max(self.data[flow_id]['window_max'], current_window)
             if self.data_total[flow_id]['packets'] == 1:
-                self.sc[flow_id] = sub_connection
+                self.flows[flow_id]['name'] = sub_connection
                 self.data_total[flow_id]['window_min'] = current_window
                 self.data_total[flow_id]['window_sum'] = current_window
                 self.data_total[flow_id]['window_max'] = current_window
@@ -5066,19 +5070,19 @@ class DataMod(Mod):
             self.data[flow_id]['retransmissions'] += 1
             self.data_total[flow_id]['retransmissions'] += 1
 
-        timediff = Utils.ts_tofloat(ts - self.start_time[flow_id])
+        timediff = Utils.ts_tofloat(ts - self.flows[flow_id]['start_time'])
 
-        if timediff >= self.last_sample[flow_id] + self.opts.samplelength:
+        if timediff >= self.flows[flow_id]['last_sample'] + self.opts.samplelength:
            # fill silent periods between a samplelength
-            while self.last_sample[flow_id] + (self.opts.samplelength * 2) < timediff:
-                self.last_sample[flow_id] += self.opts.samplelength
-                self.output_data(self.last_sample[flow_id], self.initial_data, flow_id)
+            while self.flows[flow_id]['last_sample'] + (self.opts.samplelength * 2) < timediff:
+                self.flows[flow_id]['last_sample'] += self.opts.samplelength
+                self.output_data(self.flows[flow_id]['last_sample'], self.initial_data, flow_id)
 
-            self.output_data(self.last_sample[flow_id] + self.opts.samplelength, self.data[flow_id], flow_id)
+            self.flows[flow_id]['last_sample'] += self.opts.samplelength
+            self.output_data(self.flows[flow_id]['last_sample'], self.data[flow_id], flow_id)
             self.data[flow_id]['packets']  = 0
             self.data[flow_id]['bytes']  = 0
             self.data[flow_id]['retransmissions'] = 0
-            self.last_sample[flow_id] += self.opts.samplelength
 
         # Ignore sequence numbers from packets without data
         if len(packet.data.data) > 0:
@@ -5097,64 +5101,175 @@ class DataMod(Mod):
         else:
             data['bytes'] = U.byte_to_unit(data['bytes'], self.opts.unit)
 
-        self.speed['all'][flow_id].append(throughput_per_second)
+        data['retransmissions_percent'] = data['retransmissions'] / data['packets'] * 100.0
+        self.flows[flow_id]['speed_all'].append(throughput_per_second)
         if time >= self.opts.threshold:
-            self.speed['threshold'][flow_id].append(throughput_per_second)
+            self.flows[flow_id]['speed_threshold'].append(throughput_per_second)
 
         if self.opts.csv:
-            self.data_file.write(self.opts.delimiter.join([str(flow_id), str(time)] + ["%.2f" % data[field] for field in self.wanted_fields]) + "\n")
+            self.flows[flow_id]['datafile'].write(self.opts.delimiter.join([str(flow_id), str(time)] + ["%.2f" % data[field] for field in self.wanted_fields['names']]) + "\n")
         else:
-            output = "%4d %5.1f   " % (flow_id, time) + " ".join(["%10.1f" % data[field] for field in self.wanted_fields])
+            output = "%4d %5.1f   " % (flow_id, time) + " ".join(["%10.1f" % data[field] for field in self.wanted_fields['names']])
             sys.stdout.write(output + "\n")
 
     def create_data_files(self):
-        self.data_filepath = \
-                "%s/%s" % (self.opts.outputdir, "data.csv")
-        self.data_file = open(self.data_filepath, 'w')
+        for flow_id in self.flows:
+            filepath = "%s/%s" % (self.opts.outputdir, self.flows[flow_id]['csv_name'])
+            self.flows[flow_id]['datafile'] = open(filepath, 'w')
+        filepath = "%s/%s" % (self.opts.outputdir, "data-flow-summary.csv")
+        self.summary_file = open(filepath, 'w')
 
     def close_data_files(self):
-        self.data_file.close()
+        for flow_id in self.flows:        
+            self.flows[flow_id]['datafile'].close()
+        self.summary_file.close()
 
     def process_final(self):
+        if self.opts.init:
+            self.create_gnuplot_environment()
         if self.opts.csv:
-            fields=["Summary", "Flow", "Time Spent", "Packets", self.opts.unit, self.opts.unit + "/s", "min. %s/s" % self.opts.unit, "avg. %s/s" % self.opts.unit, "max. %s/s" % self.opts.unit, "min. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "avg. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "max. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "min. WS", "avg. WS", "max. WS", "Retransmissions"]
-            self.data_file.write(self.opts.delimiter.join(fields) + "\n")
+            fields=[
+                "Flow", 
+                "Time Spent", 
+                "Packets", 
+                self.opts.unit, 
+                self.opts.unit + "/s", 
+                "min. %s/s" % self.opts.unit, 
+                "avg. %s/s" % self.opts.unit, 
+                "max. %s/s" % self.opts.unit, 
+                "min. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), 
+                "avg. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), 
+                "max. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), 
+                "min. WS", 
+                "avg. WS", 
+                "max. WS", 
+                "Retransmissions"
+            ]
+            self.summary_file.write(self.opts.delimiter.join(fields) + "\n")
         else:
             sys.stdout.write("\n\nSummary\n=======\n")
 
         for flow_id in self.flows:
             flow_id = int(flow_id)
-            speed_all_min = min(self.speed['all'][flow_id])
-            speed_all_avg = reduce(lambda x, y: x + y, self.speed['all'][flow_id]) / len(self.speed['all'][flow_id])
-            speed_all_max = max(self.speed['all'][flow_id])
-            speed_threshold_min = min(self.speed['threshold'][flow_id])
-            speed_threshold_avg = reduce(lambda x, y: x + y, self.speed['threshold'][flow_id]) / len(self.speed['threshold'][flow_id])
-            speed_threshold_max = max(self.speed['threshold'][flow_id])
+            if self.data_total[flow_id]['packets'] == 0:
+                continue
+            if len(self.flows[flow_id]['speed_all']) > 0:
+                speed_all_min = min(self.flows[flow_id]['speed_all'])
+                speed_all_avg = reduce(lambda x, y: x + y, self.flows[flow_id]['speed_all']) / len(self.flows[flow_id]['speed_all'])
+                speed_all_max = max(self.flows[flow_id]['speed_all'])
+            else:
+                speed_all_min = speed_all_avg = speed_all_max = 0
+            if len(self.flows[flow_id]['speed_threshold']) > 0:
+                speed_threshold_min = min(self.flows[flow_id]['speed_threshold'])
+                speed_threshold_avg = reduce(lambda x, y: x + y, self.flows[flow_id]['speed_threshold']) / len(self.flows[flow_id]['speed_threshold'])
+                speed_threshold_max = max(self.flows[flow_id]['speed_threshold'])
+            else:
+                speed_threshold_min = speed_threshold_avg = speed_threshold_max = 0
+
             data = self.data_total[flow_id]
             data['window_avg'] = data['window_sum'] / data['packets']
             if self.opts.csv:
-                data=["Summary", flow_id, self.last_sample[flow_id], U.byte_to_unit(data['bytes'], self.opts.unit), U.byte_to_unit(data['bytes'] / self.last_sample[flow_id], self.opts.unit), speed_all_min, speed_all_avg, speed_all_max, speed_threshold_min, speed_threshold_avg, speed_threshold_max, data['window_min'], data['window_avg'], data['window_max'], data['retransmissions']]
-                self.data_file.write(self.opts.delimiter.join([str(x) for x in data]) + "\n")
+                output=[
+                    flow_id, 
+                    self.flows[flow_id]['last_sample'], 
+                    data['packets'],
+                    U.byte_to_unit(data['bytes'], self.opts.unit), 
+                    U.byte_to_unit(data['bytes'] / self.flows[flow_id]['last_sample'], self.opts.unit), 
+                    speed_all_min, 
+                    speed_all_avg, 
+                    speed_all_max, 
+                    speed_threshold_min, 
+                    speed_threshold_avg, 
+                    speed_threshold_max, 
+                    data['window_min'], 
+                    data['window_avg'], 
+                    data['window_max'], 
+                    data['retransmissions'],
+                    data['retransmissions'] / data['packets'] * 100.0
+                ]
+                self.summary_file.write(self.opts.delimiter.join([str(x) for x in output]) + "\n")
             else:
-                sys.stdout.write("Flow:  %s\n" % self.sc[flow_id])
-                sys.stdout.write("  Time spent:          %9.1f\n" % self.last_sample[flow_id])
-                sys.stdout.write("  Packets:             %9.1f\n" % data['packets'])
-                sys.stdout.write("  %s:%s%15.1f\n" % (self.opts.unit, ' '*(14-len(self.opts.unit)), U.byte_to_unit(data['bytes'], self.opts.unit)))
-                sys.stdout.write("  %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(12-len(self.opts.unit)), U.byte_to_unit(data['bytes'] / self.last_sample[flow_id], self.opts.unit)))
-                sys.stdout.write("  min. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_min))
-                sys.stdout.write("  avg. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_avg))
-                sys.stdout.write("  max. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_max))
-                sys.stdout.write("  min. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_min, self.opts.threshold))
-                sys.stdout.write("  avg. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_avg, self.opts.threshold))
-                sys.stdout.write("  max. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_max, self.opts.threshold))
-                sys.stdout.write("  min. WS (byte):      %9.1f\n" % data['window_min'])
-                sys.stdout.write("  avg. WS (byte):      %9.1f\n" % data['window_avg'])
-                sys.stdout.write("  max. WS (byte):      %9.1f\n" % data['window_max'])
-                sys.stdout.write("  Retransmissions:      %8.1f\n" % data['retransmissions'])
-                sys.stdout.write("\n")
+                output = "Flow:  %s\n" % self.flows[flow_id]['name']
+                output += "  Time spent:          %9.1f\n" % self.flows[flow_id]['last_sample']
+                output += "  Packets:             %9.1f\n" % data['packets']
+                output += "  %s:%s%15.1f\n" % (self.opts.unit, ' '*(14-len(self.opts.unit)), U.byte_to_unit(data['bytes'], self.opts.unit))
+                output += "  %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(12-len(self.opts.unit)), U.byte_to_unit(data['bytes'] / self.flows[flow_id]['last_sample'], self.opts.unit))
+                output += "  min. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_min)
+                output += "  avg. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_avg)
+                output += "  max. %s/s:%s%15.1f\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_all_max)
+                output += "  min. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_min, self.opts.threshold)
+                output += "  avg. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_avg, self.opts.threshold)
+                output += "  max. %s/s:%s%15.1f (after %.1fs)\n" % (self.opts.unit, ' '*(7-len(self.opts.unit)), speed_threshold_max, self.opts.threshold)
+                output += "  min. WS [byte]:      %9.1f\n" % data['window_min']
+                output += "  avg. WS [byte]:      %9.1f\n" % data['window_avg']
+                output += "  max. WS [byte]:      %9.1f\n" % data['window_max']
+                output += "  Retransmissions:      %8.1f\n" % data['retransmissions']
+                output += "  Retransmissions [%%]:  %8.1f\n\n" % (data['retransmissions'] / data['packets'] * 100.0)
+                sys.stdout.write(output)
         if self.opts.csv:
-            self.close_data_files()                
+            self.close_data_files()   
 
+    def create_gnuplot_environment(self):
+        # Makefile
+        makefile_filename = "Makefile"
+        filepath = "%s/%s" % (self.opts.outputdir, makefile_filename)
+        fd = open(filepath, 'w')
+        fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
+        fd.close()
+
+        if self.opts.persecond:
+            unit = self.opts.unit + "/s"
+        else:
+            unit = self.opts.unit
+
+        for flow_id in self.flows:
+            # throughput and retransmissions
+            tmpl = string.Template(TemplateMod().get_content_by_name("data-2axis"))
+            gpi_cmd = tmpl.substitute(PLOTFILE='throughput-retransmissions-%d.eps' % flow_id,
+                                      DATAFILE1=self.flows[flow_id]['csv_name'],
+                                      DATAFILE2=self.flows[flow_id]['csv_name'],
+                                      TITLE='Throughput / Retransmissions',
+                                      SEPARATOR=self.opts.delimiter,
+                                      UNIT1='Throughput [%s]' % unit,
+                                      UNIT2='Retransmissions',
+                                      COL1=4,
+                                      COL2=8
+                                      )
+
+            filepath = "%s/throughput-retransmissions-%d.gpi" % (self.opts.outputdir, flow_id)
+            fd = open(filepath, 'w')
+            fd.write("%s" % (gpi_cmd))
+            fd.close()
+
+        # retransmissions-ratio
+        if len(self.flows) == 1:
+            tmpl = string.Template(TemplateMod().get_content_by_name("data"))
+            gpi_cmd = tmpl.substitute(PLOTFILE='retransmissions-ratio.eps',
+                                      DATAFILE=self.flows[self.flows.keys()[0]]['csv_name'],
+                                      TITLE='Retransmissions / Packets Ratio',
+                                      SEPARATOR=self.opts.delimiter,
+                                      UNIT=self.flows[1]['name'],
+                                      YLABEL='Retransmissions [%]',
+                                      COL=9
+                                      ) 
+        else:
+            tmpl = string.Template(TemplateMod().get_content_by_name("data-2plots"))
+            gpi_cmd = tmpl.substitute(PLOTFILE='retransmissions-ratio.eps',
+                                      DATAFILE1=self.flows[1]['csv_name'],
+                                      DATAFILE2=self.flows[2]['csv_name'],
+                                      TITLE='Retransmissions / Packets Ratio',
+                                      SEPARATOR=self.opts.delimiter,
+                                      UNIT1=self.flows[1]['name'],
+                                      UNIT2=self.flows[2]['name'],
+                                      YLABEL='Retransmissions [%]',
+                                      COL1=9,
+                                      COL2=9
+                                      )
+
+        filepath = "%s/retransmissions-ratio.gpi" % (self.opts.outputdir)
+        fd = open(filepath, 'w')
+        fd.write("%s" % (gpi_cmd))
+        fd.close()
 
 class Captcp:
 
