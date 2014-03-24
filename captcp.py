@@ -4849,7 +4849,6 @@ class SocketStatisticsMod(Mod):
 
 class DataMod(Mod):
     def initialize(self):
-        self.color = RainbowColor(mode=RainbowColor.ANSI)
         self.parse_local_options()
         if self.opts.persecond:
             per_second = '/s'
@@ -4910,7 +4909,6 @@ class DataMod(Mod):
         }
         self.wanted_fields = ['packets', 'bytes', 'window_min', 'window_avg', 'window_max', 'retransmissions']
         self.wanted_fields_titles = ['Packets' + per_second, self.opts.unit + per_second, 'min. WS', 'avg. WS', 'max. WS', 'Retr.']
-        self.total_data_len = 0
         self.start_time = { 1: False, 2: False }
         self.last_sample = { 1: False, 2: False }
         self.window_scale = { 1:1, 2:1 }
@@ -4920,13 +4918,11 @@ class DataMod(Mod):
             'threshold': { 1: [], 2: [] }
         }
 
-
         if self.opts.csv:
             self.check_options()
             self.create_data_files()            
             self.data_file.write(self.opts.delimiter.join(["Flow","Time"] + self.wanted_fields_titles) + "\n")
         else:
-            output = "Flow  Time  "
             output = "Flow  Time  " + "".join([ "  %9s" % title for title in self.wanted_fields_titles]) + "\n"
             sys.stdout.write(output)
 
@@ -4993,20 +4989,21 @@ class DataMod(Mod):
             self.local_flow_id = False
             self.flows = [1, 2]
 
-        
-
         if self.opts.samplelength != 1.0 and not self.opts.persecond:
             self.logger.warning("WARNING: graph is scaled to %s per %.1f seconds" %
                                 (self.opts.unit, self.opts.samplelength))
             self.logger.warning("Use --per-second (-p) option if you want per-second average")
 
     def pre_process_packet(self, ts, packet):
+        # Skip "not-TCP" packets
         if not PacketInfo.is_tcp(packet):
             return False
         
+        # Skip packets from wrong connections
         if not self.cc.is_packet_connection(packet, int(self.connection_id)):
             return False
 
+        # Skip packets from wrong flow (if flow was given)
         sub_connection = self.cc.sub_connection_by_packet(packet)
         flow_id = sub_connection.sub_connection_id
         if not flow_id in self.flows:
@@ -5026,6 +5023,7 @@ class DataMod(Mod):
 
         pi = TcpPacketInfo(packet)
 
+        # Get window scaling factor from first SYN packet   
         if pi.is_syn_flag():
             pi.parse_tcp_options()
             if pi.options['wsc']:
@@ -5040,13 +5038,12 @@ class DataMod(Mod):
             self.start_time[flow_id] = ts
             self.last_sample[flow_id] = 0.0
 
+        # Only count data for new packets
         if sequence_number >= self.data[flow_id]['max_sequence']:
             self.data[flow_id]['packets'] += 1
             self.data[flow_id]['bytes'] += data_len
             self.data_total[flow_id]['packets'] += 1
             self.data_total[flow_id]['bytes'] += data_len
-            # if flow_id == 1:
-                #print("min: %d, avg: %d, max: %d, current: %d"%(self.data[flow_id]['window_min'],self.data[flow_id]['window_avg'],self.data[flow_id]['window_max'],current_window))
             if self.data[flow_id]['packets'] == 1:
                 self.data[flow_id]['window_min'] = current_window
                 self.data[flow_id]['window_sum'] = current_window
@@ -5065,6 +5062,7 @@ class DataMod(Mod):
                 self.data_total[flow_id]['window_sum'] += current_window
                 self.data_total[flow_id]['window_max'] = max(self.data_total[flow_id]['window_max'], current_window)
         else:
+            # Already seen higher sequence number -> Retransmission
             self.data[flow_id]['retransmissions'] += 1
             self.data_total[flow_id]['retransmissions'] += 1
 
@@ -5080,10 +5078,9 @@ class DataMod(Mod):
             self.data[flow_id]['packets']  = 0
             self.data[flow_id]['bytes']  = 0
             self.data[flow_id]['retransmissions'] = 0
-
             self.last_sample[flow_id] += self.opts.samplelength
 
-
+        # Ignore sequence numbers from packets without data
         if len(packet.data.data) > 0:
             self.data[flow_id]['max_sequence'] = max(self.data[flow_id]['max_sequence'], sequence_number)        
 
@@ -5120,8 +5117,7 @@ class DataMod(Mod):
 
     def process_final(self):
         if self.opts.csv:
-            self.data_file.write("\n\nSummary\n=======\n")
-            fields=["Flow", "Time Spent", "Packets", self.opts.unit, self.opts.unit + "/s", "min. %s/s" % self.opts.unit, "avg. %s/s" % self.opts.unit, "max. %s/s" % self.opts.unit, "min. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "avg. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "max. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "min. WS", "avg. WS", "max. WS", "Retransmissions"]
+            fields=["Summary", "Flow", "Time Spent", "Packets", self.opts.unit, self.opts.unit + "/s", "min. %s/s" % self.opts.unit, "avg. %s/s" % self.opts.unit, "max. %s/s" % self.opts.unit, "min. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "avg. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "max. %s/s (%s s)" % (self.opts.unit, self.opts.threshold), "min. WS", "avg. WS", "max. WS", "Retransmissions"]
             self.data_file.write(self.opts.delimiter.join(fields) + "\n")
         else:
             sys.stdout.write("\n\nSummary\n=======\n")
@@ -5137,7 +5133,7 @@ class DataMod(Mod):
             data = self.data_total[flow_id]
             data['window_avg'] = data['window_sum'] / data['packets']
             if self.opts.csv:
-                data=[flow_id, self.last_sample[flow_id], U.byte_to_unit(data['bytes'], self.opts.unit), U.byte_to_unit(data['bytes'] / self.last_sample[flow_id], self.opts.unit), speed_all_min, speed_all_avg, speed_all_max, speed_threshold_min, speed_threshold_avg, speed_threshold_max, data['window_min'], data['window_avg'], data['window_max'], data['retransmissions']]
+                data=["Summary", flow_id, self.last_sample[flow_id], U.byte_to_unit(data['bytes'], self.opts.unit), U.byte_to_unit(data['bytes'] / self.last_sample[flow_id], self.opts.unit), speed_all_min, speed_all_avg, speed_all_max, speed_threshold_min, speed_threshold_avg, speed_threshold_max, data['window_min'], data['window_avg'], data['window_max'], data['retransmissions']]
                 self.data_file.write(self.opts.delimiter.join([str(x) for x in data]) + "\n")
             else:
                 sys.stdout.write("Flow:  %s\n" % self.sc[flow_id])
@@ -5179,7 +5175,7 @@ class Captcp:
        "animation":       [ "ConnectionAnimationMod", "Generate animation (html) of packet flow" ],
        "socketstatistic": [ "SocketStatisticsMod", "Graph output (mem, rtt, ...) from ss(8) over time" ],
        "data":            [ "DataMod", "Display statistical data for each time interval"]
-            }
+    }
 
     def __init__(self):
         self.captcp_starttime = datetime.datetime.today()
