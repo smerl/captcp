@@ -19,4 +19,4 @@ set y2label "$UNIT2" tc ls 2
 
 plot \
      "$DATAFILE1" using 2:$COL1 title '$UNIT1'  with linespoints ls 1 axes x1y1,\
-     "$DATAFILE2" using 2:$COL2 title '$UNIT2'  with linespoints ls 2 axes x1y1
+     "$DATAFILE2" using 2:$COL2 title '$UNIT2'  with linespoints ls 2 axes x1y2

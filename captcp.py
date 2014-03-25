@@ -5144,7 +5144,8 @@ class DataMod(Mod):
                 "min. WS", 
                 "avg. WS", 
                 "max. WS", 
-                "Retransmissions"
+                "Retransmissions",
+                "Retransmissions %"
             ]
             self.summary_file.write(self.opts.delimiter.join(fields) + "\n")
         else:
