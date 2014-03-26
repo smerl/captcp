@@ -5096,12 +5096,8 @@ class DataMod(Mod):
             data['window_avg'] = data['window_sum'] / data['packets']  
         else:
             data['window_avg'] = 0
-            data['retransmissions_percent'] = 0
 
-        if data['retransmissions'] == 0:
-            data['retransmissions_percent'] = 0
-        else:
-            data['retransmissions_percent'] = data['retransmissions'] / (data['packets'] + data['retransmissions']) * 100.0
+        data['retransmissions_percent'] = U.percent(data['retransmissions'], data['packets'] + data['retransmissions'])
 
         throughput_per_second = U.byte_to_unit(data['bytes'] / self.opts.samplelength, self.opts.unit)
         if self.opts.persecond:
@@ -5194,7 +5190,7 @@ class DataMod(Mod):
                     data['window_avg'], 
                     data['window_max'], 
                     data['retransmissions'],
-                    data['retransmissions'] / (data['packets'] + data['retransmissions']) * 100.0
+                    U.percent(data['retransmissions'], data['packets'] + data['retransmissions'])
                 ]
                 self.summary_file.write(self.opts.delimiter.join([str(x) for x in output]) + "\n")
             else:
@@ -5213,7 +5209,7 @@ class DataMod(Mod):
                 output += "  avg. WS [byte]:      %9.1f\n" % data['window_avg']
                 output += "  max. WS [byte]:      %9.1f\n" % data['window_max']
                 output += "  Retransmissions:      %8.1f\n" % data['retransmissions']
-                output += "  Retransmissions [%%]:  %8.1f\n\n" % (data['retransmissions'] / (data['packets'] + data['retransmissions']) * 100.0)
+                output += "  Retransmissions [%%]:  %8.1f\n\n" % U.percent(data['retransmissions'], data['packets'] + data['retransmissions'])
                 sys.stdout.write(output)
         if self.opts.csv:
             self.close_data_files()   
