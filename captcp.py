@@ -5045,9 +5045,8 @@ class DataMod(Mod):
         # Only count data for new packets
         # If highest sequence number and current sequence number are more then 2^31 apart, assume overflow
         if sequence_number >= self.data[flow_id]['max_sequence'] and sequence_number - self.data[flow_id]['max_sequence'] < 2**31 \
-        or sequence_number <= self.data[flow_id]['max_sequence'] and self.data[flow_id]['max_sequence'] - sequence_number > 2**31:
-            if sequence_number < self.data[flow_id]['max_sequence'] - 2**31:
-                self.data[flow_id]['max_sequence'] = sequence_number
+        or sequence_number <= self.data[flow_id]['max_sequence'] and self.data[flow_id]['max_sequence'] - sequence_number > 2**31 \
+        or self.data[flow_id]['max_sequence'] == 0:
             self.data[flow_id]['packets'] += 1
             self.data[flow_id]['bytes'] += data_len
             self.data_total[flow_id]['packets'] += 1
