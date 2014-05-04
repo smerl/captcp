@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with Captcp. If not, see <http://www.gnu.org/licenses/>.
 
-
 from __future__ import print_function
 
 import sys
@@ -124,6 +123,7 @@ UDP = dpkt.udp.UDP
 
 
 class ExitCodes:
+
     EXIT_SUCCESS     = 0
     EXIT_ERROR       = 1
     EXIT_CMD_LINE    = 2
@@ -132,6 +132,7 @@ class ExitCodes:
 
 
 class Info:
+
     ETHERNET_HEADER_LEN = 14
 
 
@@ -145,7 +146,6 @@ class SequenceContainer:
         if not numpy:
             self.logger.error("Python numpy module not installed - but required")
             sys.exit(ExitCodes.EXIT_CMD_LINE)
-
 
     def __len__(self):
         return len(self.sequnce_list)
@@ -162,14 +162,12 @@ class SequenceContainer:
         s2 = numpy.array(summand, dtype=numpy.dtype('uint32'))
         return int(numpy.array((s1 + s2), dtype=numpy.dtype('uint32')))
 
-
     @staticmethod
     def uint32_sub(num, summand):
         """ the caller (Module) must make sure that module is available """
         s1 = numpy.array(num, dtype=numpy.dtype('uint32'))
         s2 = numpy.array(summand, dtype=numpy.dtype('uint32'))
         return int(numpy.array((s1 - s2), dtype=numpy.dtype('uint32')))
-
 
     def before(self, seq1, seq2):
         s1 = numpy.array(seq1, dtype=numpy.dtype('uint32'))
@@ -285,7 +283,6 @@ class U:
         if unit == "GiB" or unit == "gibibyte":
             return byte / (1024 * 1024 * 1024)
 
-
         if unit == "kbit" or unit == "kilobit":
             return byte * 8 / 1000
         if unit == "Mbit" or unit == "megabit":
@@ -301,7 +298,6 @@ class U:
             return byte * 8 / (1024 * 1024 * 1024)
 
         raise UnitException("unit %s not known" % (unit))
-
 
     @staticmethod
     def best_match(byte):
@@ -321,7 +317,6 @@ class U:
     def percent(a, b):
         if b == 0: return 0.0
         return float(a) / b * 100
-
 
     @staticmethod
     def copytree(src, dst, symlinks=False, ignore=None):
@@ -471,27 +466,24 @@ class Utils:
         return float(ts.seconds) + ts.microseconds / 1E6 + ts.days * 86400
 
 
-
 class Converter:
 
+    @staticmethod
     def dotted_quad_num(ip):
         "convert decimal dotted quad string to long integer"
         return struct.unpack('I', socket.inet_aton(ip))[0]
-    dotted_quad_num = staticmethod(dotted_quad_num)
 
-
+    @staticmethod
     def num_to_dotted_quad(n):
         "convert long int to dotted quad string"
         return socket.inet_ntoa(struct.pack('I', n))
-    num_to_dotted_quad = staticmethod(num_to_dotted_quad)
 
+    @staticmethod
     def make_mask(n):
         "return a mask of n bits as a long integer"
         return (1L << n)-1
 
-    make_mask = staticmethod(make_mask)
-
-
+    @staticmethod
     def dpkt_addr_to_string(addr):
         if len(addr) == 16:
             # IPv6
@@ -502,9 +494,7 @@ class Converter:
             iaddr = int(struct.unpack('I', addr)[0])
             return Converter.num_to_dotted_quad(iaddr)
 
-    dpkt_addr_to_string  = staticmethod(dpkt_addr_to_string)
-
-
+    @staticmethod
     def ip_to_net_host(ip, maskbits):
         "returns tuple (network, host) dotted-quad addresses given IP and mask size"
 
@@ -515,9 +505,6 @@ class Converter:
         net = n - host
 
         return Converter.num_to_dotted_quad(net), Converter.num_to_dotted_quad(host)
-
-    ip_to_net_host = staticmethod(ip_to_net_host)
-
 
 
 class PcapParser:
@@ -547,10 +534,8 @@ class PcapParser:
                               self.pc.datalink()))
             self.decode = dpkt.ethernet.Ethernet
 
-
         if pcap_filter:
             self.pc.setfilter(pcap_filter)
-
 
     def __del__(self):
         if self.pcap_file:
@@ -564,7 +549,6 @@ class PcapParser:
                             " - please recapture with snaplen of 0: infinity" %
                              (packet_len, snaplen))
 
-
     def run(self):
         try:
             for ts, pkt in self.pc:
@@ -576,7 +560,6 @@ class PcapParser:
                 self.callback(dt, packet.data)
         except SkipProcessStepException:
             self.logger.debug("skip processing step")
-
 
 
 class PacketInfo:
@@ -632,14 +615,16 @@ class IpPacketInfo(PacketInfo):
         self.sum = int(self.tcp.sum)
 
 
-
 class TcpPacketInfo(PacketInfo):
 
     class TcpOptions:
+
         def __init__(self):
             self.data = dict()
+
         def __getitem__(self, key):
             return self.data[key]
+
         def __setitem__(self, key, val):
             self.data[key] = val
 
@@ -676,7 +661,6 @@ class TcpPacketInfo(PacketInfo):
         self.sum = int(self.tcp.sum)
 
         self.parse_tcp_options()
-
 
     def caller(self):
         stack = inspect.stack()
@@ -732,7 +716,6 @@ class TcpPacketInfo(PacketInfo):
         return s
 
     def construct_tcp_options_label(self):
-
         ret = ""
         if self.options['mss']:
             ret += "mss: %d" % (self.options['mss'])
@@ -755,9 +738,7 @@ class TcpPacketInfo(PacketInfo):
 
         return retlist
 
-
     def parse_tcp_options(self):
-
         self.options = TcpPacketInfo.TcpOptions()
         self.options['mss'] = False
         self.options['wsc'] = False
@@ -788,12 +769,12 @@ class TcpPacketInfo(PacketInfo):
             opts.append(o)
 
 
-
 class CaptureLevel:
 
     LINK_LAYER      = 0
     NETWORK_LAYER   = 1
     TRANSPORT_LAYER = 2
+
 
 class Mod:
 
@@ -832,7 +813,6 @@ class Mod:
         """ single call between pre_process_packet and process_packet to do some calc"""
         pass
 
-
     def process_packet(self, ts, packet):
         """ final packet round"""
         raise SkipProcessStepException()
@@ -861,6 +841,7 @@ class Mod:
             self.logger.setLevel(logging.ERROR)
         else:
             raise ArgumentException("loglevel \"%s\" not supported" % self.opts.loglevel)
+
 
 class Geoip(Mod):
 
@@ -907,7 +888,6 @@ class PayloadTimePortMod(Mod):
         self.data = dict()
         self.trace_start = None
 
-
     def parse_local_options(self):
         parser = optparse.OptionParser()
         parser.add_option( "-v", "--verbose", dest="loglevel", default=None,
@@ -932,7 +912,6 @@ class PayloadTimePortMod(Mod):
         self.captcp.pcap_file_path = args[2]
         self.logger.info("pcap file: %s" % (self.captcp.pcap_file_path))
 
-
     def process_packet(self, ts, packet):
         try:
             ip = packet
@@ -940,7 +919,6 @@ class PayloadTimePortMod(Mod):
         except AttributeError:
             self.logger.warning("Packet at %s could not be parsed, skipping" % ts)
             return
-
 
         if type(tcp) != TCP:
             return
@@ -954,7 +932,6 @@ class PayloadTimePortMod(Mod):
 
         if time > self.next_sampling_boundary:
             self.next_sampling_boundary = time + float(self.opts.sampling)
-
 
         if self.next_sampling_boundary - self.time_offset not in self.data:
             self.data[self.next_sampling_boundary - self.time_offset] = dict()
@@ -978,7 +955,6 @@ class PayloadTimePortMod(Mod):
         self.data[self.next_sampling_boundary - self.time_offset][sport]["sum"] += len(packet)
         self.data[self.next_sampling_boundary - self.time_offset][sport]["cnt"] += 1
 
-
     def print_data(self):
         for timesortedtupel in sorted(self.data.iteritems(), key = lambda (k,v): float(k)):
             time = timesortedtupel[0]
@@ -994,12 +970,8 @@ class PayloadTimePortMod(Mod):
 
             sys.stdout.write("\n")
 
-
     def process_final(self):
         self.print_data()
-
-
-
 
 
 class TemplateMod(Mod):
@@ -1009,11 +981,9 @@ class TemplateMod(Mod):
     TYPE_MAKEFILE = 1
     TYPE_GNUPLOT  = 2
 
-
     def __init__(self):
         Mod.__init__(self)
         self.init_db()
-
 
     def initialize(self):
         self.parse_local_options()
@@ -1036,7 +1006,6 @@ class TemplateMod(Mod):
         fd.close()
 
         return data
-
 
     def init_db(self):
         self.logger.debug("initialize local template database")
@@ -1066,7 +1035,6 @@ class TemplateMod(Mod):
 
             self.db.append(tc)
 
-
     def print_available_templates(self):
         gpi = list(); mak = list()
 
@@ -1085,7 +1053,6 @@ class TemplateMod(Mod):
         sys.stdout.write("\ngnuplot templates:\n")
         for i in gpi:
             sys.stdout.write("\t%s\n" % (i.name))
-
 
     def parse_local_options(self):
 
@@ -1118,7 +1085,6 @@ class TemplateMod(Mod):
         self.template_name = args[2]
         self.logger.info("template_name: %s" % (self.template_name))
 
-
     def process_final(self):
         c = self.get_content_by_name(self.template_name)
         if not c:
@@ -1126,7 +1092,6 @@ class TemplateMod(Mod):
             return
 
         sys.stdout.write(c)
-
 
 
 class StackTraceMod(Mod):
@@ -1139,7 +1104,6 @@ class StackTraceMod(Mod):
         sys.stderr.write("# 1. Make sure you have a working systemtap environment\n")
         sys.stderr.write("# 2. Make sure sudo systemtap ... is working without password (or run as root)\n")
         sys.stderr.write("# 2. CTRL-C to interrupt data collecting\n")
-
 
     def create_gnuplot_environment(self):
         gnuplot_filename = "cwnd.gpi"
@@ -1155,7 +1119,6 @@ class StackTraceMod(Mod):
         fd.write("%s" % (Template.gnuplot_makefile))
         fd.close()
 
-
     def check_options(self):
         if not self.opts.outputdir:
             self.logger.error("No output directory specified: --output-dir")
@@ -1166,15 +1129,12 @@ class StackTraceMod(Mod):
                     (self.opts.outputdir))
             sys.exit(ExitCodes.EXIT_CMD_LINE)
 
-
     def create_data_files(self):
         self.stap_raw_filepath = "%s/%s" % (self.opts.outputdir, "stap-raw.data")
         self.stap_raw_file = open(self.stap_raw_filepath, 'w')
 
-
     def close_data_files(self):
         self.stap_raw_file.close()
-
 
     def parse_local_options(self):
         self.width = self.height = 0
@@ -1206,7 +1166,6 @@ class StackTraceMod(Mod):
             self.create_gnuplot_environment()
 
         self.create_data_files()
-
 
     def process_final(self):
         stap_script = "%s/data/stap-scripts/tcp-trace.stp" % \
@@ -1258,7 +1217,6 @@ class StackTraceMod(Mod):
         sys.stderr.write("# now execute \"make\" in %s\n" % (self.opts.outputdir))
 
 
-
 class TimeSequenceMod(Mod):
 
     # Gnuplot arrow colors
@@ -1284,7 +1242,6 @@ class TimeSequenceMod(Mod):
         self.wscale_receiver       = 1
         self.parse_local_options()
         self.logger.warning("ADVICE: capture the data at sender side!")
-
 
     def create_files(self):
         self.data_flow_filepath      = "%s/%s" % (self.opts.outputdir, "seq.data")
@@ -1320,7 +1277,6 @@ class TimeSequenceMod(Mod):
             self.arrow_ece_fd  = open(self.data_arrow_ece_filepath, 'w')
             self.arrow_cwr_fd  = open(self.data_arrow_cwr_filepath, 'w')
 
-
     def close_files(self):
         self.data_flow_fd.close()
         self.ack_flow_fd.close()
@@ -1334,7 +1290,6 @@ class TimeSequenceMod(Mod):
             self.arrow_push_fd.close()
             self.arrow_ece_fd.close()
             self.arrow_cwr_fd.close()
-
 
     def create_gnuplot_environment(self):
         gnuplot_filename = "time-sequence.gpi"
@@ -1399,7 +1354,6 @@ class TimeSequenceMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_options(self):
         if not self.opts.outputdir:
             self.logger.error("No output directory specified: --output-dir")
@@ -1438,8 +1392,6 @@ class TimeSequenceMod(Mod):
 
         sys.stderr.write("# connection: %s (data flow: %s, ACK flow: %s)\n" %
                 (self.connection_id, self.data_flow_id, self.ack_flow_id))
-
-
 
     def prepare_gnuplot_options(self):
 
@@ -1486,11 +1438,6 @@ class TimeSequenceMod(Mod):
         if ("no-title" in self.opts.gnuplotoptions and
             "title" in self.opts.gnuplotoptions):
             raise ArgumentException("Gnuplot title AND no-title options are not allowed")
-
-
-
-
-
 
     def parse_local_options(self):
         self.width = self.height = 0
@@ -1540,7 +1487,6 @@ class TimeSequenceMod(Mod):
         self.logger.info("pcap file: %s" % (self.captcp.pcap_file_path))
         self.create_files()
 
-
     def check_packet(self, ts, packet):
         if type(packet) != dpkt.ip.IP and type(packet) != dpkt.ip6.IP6:
             return False
@@ -1565,12 +1511,10 @@ class TimeSequenceMod(Mod):
 
         return True
 
-
     def pre_process_data_flow_packet(self, ts, packet):
         packet_time = self.calculate_offset_time(ts)
         if not self.reference_tx_seq:
             self.reference_tx_seq = TcpPacketInfo(packet).seq;
-
 
     def pre_process_packet(self, ts, packet):
         if not self.check_packet(ts, packet):
@@ -1580,7 +1524,6 @@ class TimeSequenceMod(Mod):
         if sub_connection.sub_connection_id == int(self.data_flow_id):
             self.pre_process_data_flow_packet(ts, packet)
 
-
     def pre_process_final(self):
         self.logger.info("displayed time frame: %.2fs to %.2fs" %
                     (self.v_start, self.v_end))
@@ -1588,12 +1531,10 @@ class TimeSequenceMod(Mod):
         self.arrow_length = (self.v_end - self.v_start) * 0.025
         self.logger.debug("arrow length in seconds: %lf" % (self.arrow_length))
 
-
     def calculate_offset_time(self, ts):
         time_diff = ts - self.reference_time
         return float(time_diff.seconds) + time_diff.microseconds / \
                1E6 + time_diff.days * 86400
-
 
     def process_data_flow_packet(self, ts, packet):
         packet_time = self.calculate_offset_time(ts)
@@ -1644,14 +1585,12 @@ class TimeSequenceMod(Mod):
         if len(packet.data.data) > 0:
             self.highest_seq = max(pi.seq, self.highest_seq)
 
-
     def calc_advertised_window(self, pi):
         # only enabled if both hosts support window scaling
         if not self.wscale_sender_support:
             return pi.win + pi.ack
         else:
             return pi.win * self.wscale_receiver + pi.ack
-
 
     def process_ack_flow_packet(self, ts, packet):
         packet_time = self.calculate_offset_time(ts)
@@ -1709,7 +1648,6 @@ class TimeSequenceMod(Mod):
         if pi.options['wsc']:
             self.wscale_receiver = math.pow(2, int(pi.options['wsc']))
 
-
     def process_packet(self, ts, packet):
         if not self.check_packet(ts, packet):
             return
@@ -1723,11 +1661,9 @@ class TimeSequenceMod(Mod):
         else:
             raise InternalException
 
-
     def process_final(self):
         self.close_files()
         self.logger.warning("now execute (cd %s; make preview)" % (self.opts.outputdir))
-
 
 
 class FlowGraphMod(Mod):
@@ -1760,7 +1696,6 @@ class FlowGraphMod(Mod):
         self.packet_timestamp_punchcard[False] = []
 
         self.reference_time = False
-
 
     def setup_cairo(self):
         line_width = 1.6
@@ -1810,7 +1745,6 @@ class FlowGraphMod(Mod):
         self.cr.show_text(text)
         self.cr.stroke()
 
-
     def draw_background_grid(self):
         grid_line_width = 0.1
 
@@ -1831,7 +1765,6 @@ class FlowGraphMod(Mod):
 
             if i > self.height - self.margin_top_bottom:
                 break
-
 
     def pre_process_final(self):
         if self.ids:
@@ -1893,7 +1826,6 @@ class FlowGraphMod(Mod):
 
         self.logger.info("now draw %d packets" % self.packets_to_draw)
 
-
     def rttbw_to_bits(self):
         if "mbps" in self.opts.rttbw.lower():
             return float(self.opts.rttbw.lower().replace("mbps",""))*1000000
@@ -1901,7 +1833,6 @@ class FlowGraphMod(Mod):
             return float(self.opts.rttbw.lower().replace("kbps",""))*1000
         if "bps" in self.opts.rttbw.lower():
             return float(self.opts.rttbw.lower().replace("bps",""))
-
 
     def parse_local_options(self):
         self.width = self.height = 0
@@ -1981,7 +1912,6 @@ class FlowGraphMod(Mod):
             self.logger.info("visualization limited to the following connections: %s" %
                     (str(self.ids)))
 
-
     def local_generated_packet(self, packet):
         if type(packet) == dpkt.ip.IP:
             if Converter.dpkt_addr_to_string(packet.src) == self.opts.localaddr:
@@ -1997,14 +1927,11 @@ class FlowGraphMod(Mod):
         else:
             raise InternalException()
 
-
     def ts_tofloat(self, ts):
         return float(ts.seconds) + ts.microseconds / 1E6 + ts.days * 86400
 
-
     def reduced_labeling(self):
         return self.packets_to_draw > FlowGraphMod.PACKET_LABELING_THRESH
-
 
     def draw_timestamp(self, sequence, ts, packet):
         time = "%.5f" % (ts)
@@ -2030,7 +1957,6 @@ class FlowGraphMod(Mod):
 
         self.packet_timestamp_punchcard[sequence.local].append(y_offset)
 
-
     def construct_label_string(self, packet):
         pi = TcpPacketInfo(packet)
 
@@ -2053,7 +1979,6 @@ class FlowGraphMod(Mod):
             text += "}"
 
         return text
-
 
     def draw_labels(self, sequence, ts, packet):
         local_margin = 3
@@ -2098,7 +2023,6 @@ class FlowGraphMod(Mod):
 
         self.cr.restore()
 
-
     def draw_sequence(self, sequence, ts, packet):
         self.draw_timestamp(sequence, ts, packet)
 
@@ -2110,7 +2034,6 @@ class FlowGraphMod(Mod):
         self.cr.move_to(sequence.xs, sequence.ys)
         self.cr.line_to(sequence.xe, sequence.ye)
         self.cr.stroke()
-
 
     def draw_arrows(self, sequence):
         pi_half = math.pi / 2.0
@@ -2175,7 +2098,6 @@ class FlowGraphMod(Mod):
             self.cr.close_path()
             self.cr.fill()
 
-
     def is_drawable_packet(self, ts, packet):
         if type(packet) != dpkt.ip.IP and type(packet) != dpkt.ip6.IP6:
             return False
@@ -2198,7 +2120,6 @@ class FlowGraphMod(Mod):
 
         return False
 
-
     def pre_process_packet(self, ts, packet):
         if not self.reference_time:
             # time time where the first packet is
@@ -2209,7 +2130,6 @@ class FlowGraphMod(Mod):
             return
 
         self.packets_to_draw += 1
-
 
     def process_packet(self, ts, packet):
         if not self.is_drawable_packet(ts, packet):
@@ -2248,11 +2168,9 @@ class FlowGraphMod(Mod):
         self.draw_sequence(s, display_time, packet)
         self.draw_arrows(s)
 
-
     def process_final(self):
         self.logger.debug("generate PDF file \"%s\"" % (self.opts.filename))
         self.cr.show_page()
-
 
 
 class TcpConn:
@@ -2281,7 +2199,6 @@ class TcpConn:
                 (self.dipnum) + ((self.sport) + \
                 (self.dport)))
 
-
     def __hash__(self):
         return self.iuid
 
@@ -2308,7 +2225,6 @@ class SubConnection(TcpConn):
         self.statistic = SubConnectionStatistic()
         self.user_data = dict()
 
-
     def __cmp__(self, other):
         if other == None:
             return True
@@ -2322,7 +2238,6 @@ class SubConnection(TcpConn):
         else:
             return True
 
-
     def __repr__(self):
         return "%s:%s -> %s:%s" % (
                     self.sip,
@@ -2330,14 +2245,11 @@ class SubConnection(TcpConn):
                     self.dip,
                     self.dport)
 
-
     def update(self, ts, packet):
         self.statistic.packets_processed += 1
 
-
     def set_subconnection_id(self, sub_connection_id):
         self.sub_connection_id = sub_connection_id
-
 
     def is_in(self, ids):
         for i in ids:
@@ -2354,7 +2266,6 @@ class SubConnection(TcpConn):
         return False
 
 
-
 class ConnectionStatistic:
 
     def __init__(self):
@@ -2363,7 +2274,6 @@ class ConnectionStatistic:
         self.bytes_sent_network_layer   = 0
         self.bytes_sent_transport_layer = 0
         self.bytes_sent_application_layer = 0
-
 
 
 class Connection(TcpConn):
@@ -2384,10 +2294,8 @@ class Connection(TcpConn):
         # to stick data to a connection
         self.user_data = dict()
 
-
     def __del__(self):
         Connection.static_connection_id -= 1
-
 
     def __cmp__(self, other):
         if self.ipversion != other.ipversion:
@@ -2408,10 +2316,8 @@ class Connection(TcpConn):
     def register_container(self, container):
         self.container = container
 
-
     def update_statistic(self, packet):
         self.statistic.packets_processed  += 1
-
 
     def update(self, ts, packet):
         self.update_statistic(packet)
@@ -2441,7 +2347,6 @@ class Connection(TcpConn):
         sc.update(ts, packet)
         sc.set_subconnection_id(2)
 
-
     def get_subconnection(self, packet):
         # we know that packet is a TCP packet
         if self.sc1 == None:
@@ -2452,7 +2357,6 @@ class Connection(TcpConn):
         else:
             assert(self.sc2)
             return self.sc2
-
 
 
 class ConnectionContainerStatistic:
@@ -2477,9 +2381,7 @@ class ConnectionContainerStatistic:
         self.bytes_sent_transport_layer   = 0
 
 
-
 class ConnectionContainer:
-
 
     def __init__(self):
         self.container = dict()
@@ -2487,10 +2389,8 @@ class ConnectionContainer:
         self.capture_time_start = None
         self.capture_time_end = None
 
-
     def __len__(self):
         return len(self.container)
-
 
     def connection_by_uid(self, uid):
         for i in self.container.keys():
@@ -2498,7 +2398,6 @@ class ConnectionContainer:
                 return self.container[i]
 
         return None
-
 
     def tcp_check(self, packet):
         if type(packet) != dpkt.ip.IP and type(packet) != dpkt.ip6.IP6:
@@ -2508,7 +2407,6 @@ class ConnectionContainer:
             return False
 
         return True
-
 
     def sub_connection_by_packet(self, packet):
         if not self.tcp_check(packet):
@@ -2524,7 +2422,6 @@ class ConnectionContainer:
 
         return self.container[c.uid].get_subconnection(packet)
 
-
     def connection_by_packet(self, packet):
         if not self.tcp_check(packet):
             return None
@@ -2535,7 +2432,6 @@ class ConnectionContainer:
             raise InternalException("packet MUST be in preprocesses container")
         else:
             return self.container[c.uid]
-
 
     def is_packet_connection(self, packet, uid):
         if not self.tcp_check(packet):
@@ -2552,7 +2448,6 @@ class ConnectionContainer:
             return True
         else:
             return False
-
 
     def update(self, ts, packet):
         if type(packet) != dpkt.ip.IP and type(packet) != dpkt.ip6.IP6:
@@ -2602,7 +2497,6 @@ class ConnectionAnalyzeMod(Mod):
             self.captcp.pcap_filter = " ".join(args[3:])
             self.logger.info("pcap filter: \"" + self.captcp.pcap_filter + "\"")
 
-
     def process_final(self):
         sys.stdout.write("digraph G {\nranksep=3.0;\nnodesep=2.0;\n")
         sys.stdout.write("#size=\"7.75,10.25\";\n orientation=\"landscape\"\n")
@@ -2642,7 +2536,6 @@ class ConnectionAnalyzeMod(Mod):
 
 
 
-
 class ThroughputMod(Mod):
 
     def create_gnuplot_environment(self):
@@ -2675,7 +2568,6 @@ class ThroughputMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_options(self):
         if not self.opts.outputdir:
             self.logger.error("No output directory specified: --output-dir")
@@ -2686,16 +2578,13 @@ class ThroughputMod(Mod):
                     (self.opts.outputdir))
             sys.exit(ExitCodes.EXIT_CMD_LINE)
 
-
     def create_data_files(self):
         self.throughput_filepath = \
                 "%s/%s" % (self.opts.outputdir, "throughput.data")
         self.throughput_file = open(self.throughput_filepath, 'w')
 
-
     def close_data_files(self):
         self.throughput_file.close()
-
 
     def initialize(self):
         self.parse_local_options()
@@ -2797,7 +2686,6 @@ class ThroughputMod(Mod):
         else:
             self.throughput_file.write("%.5f %.8f\n" % (time, amount))
 
-
     def pre_process_packet(self, ts, packet):
         if self.opts.reference_time and not self.first_packet_seen:
             self.first_packet_seen = ts
@@ -2859,7 +2747,6 @@ class ThroughputMod(Mod):
         self.data += data_len
         self.end_time = ts
 
-
     def process_final(self):
         # check if we processes any packet at all
         if not self.end_time or not self.start_time:
@@ -2889,8 +2776,6 @@ class ThroughputMod(Mod):
         self.logger.warning("now execute (cd %s; make preview)" % (self.opts.outputdir))
 
 
-
-
 class InFlightMod(Mod):
 
     def initialize(self):
@@ -2904,7 +2789,6 @@ class InFlightMod(Mod):
             if self.opts.init:
                 self.create_gnuplot_environment()
             self.create_data_files()
-
 
     def parse_local_options(self):
         self.ids = False
@@ -2949,7 +2833,6 @@ class InFlightMod(Mod):
         sys.stderr.write("# connection: %s (data flow: %s, ACK flow: %s)\n" %
                 (self.connection_id, self.data_flow_id, self.ack_flow_id))
 
-
     def create_gnuplot_environment(self):
         gnuplot_filename = "inflight.gpi"
         makefile_filename = "Makefile"
@@ -2972,7 +2855,6 @@ class InFlightMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_options(self):
         if not self.opts.outputdir:
             self.logger.error("No output directory specified: --output-dir")
@@ -2983,29 +2865,24 @@ class InFlightMod(Mod):
                     (self.opts.outputdir))
             sys.exit(ExitCodes.EXIT_CMD_LINE)
 
-
     def create_data_files(self):
         self.filepath = \
                 "%s/%s" % (self.opts.outputdir, "inflight.data")
         self.file = open(self.filepath, 'w')
 
-
     def close_data_files(self):
         self.file.close()
-
 
     def process_data_flow(self, ts, packet):
         pi = TcpPacketInfo(packet)
         data = (pi.seq, ts, packet)
         self.packet_sequence.append(data)
 
-
     def process_ack_flow(self, ts, packet):
         pi = TcpPacketInfo(packet)
         for i in list(self.packet_sequence):
             if pi.ack >= i[0]:
                 self.packet_sequence.remove(i)
-
 
     def gnuplot_out(self, time, is_data):
         #if self.packet_prev:
@@ -3016,7 +2893,6 @@ class InFlightMod(Mod):
         else:
             self.file.write("%.5f %d\n" % (time, len(self.packet_sequence)))
         #self.packet_prev = len(self.packet_sequence)
-
 
     def stdio_out(self, time, is_data):
         if is_data: kind = "TX"
@@ -3030,7 +2906,6 @@ class InFlightMod(Mod):
             sys.stdout.write("%.5f %s %d\t%s\n" %
                     (time, kind, len(self.packet_sequence), '#' * len(self.packet_sequence)))
             self.inflight_max = max(self.inflight_max, len(self.packet_sequence))
-
 
     def pre_process_packet(self, ts, packet):
         sub_connection = self.cc.sub_connection_by_packet(packet)
@@ -3053,15 +2928,11 @@ class InFlightMod(Mod):
         else:
             self.gnuplot_out(time, is_data)
 
-
     def process_final(self):
         if not self.opts.stdio:
             self.close_data_files()
         else:
             sys.stdout.write("# inflight max %d packets\n" % (self.inflight_max))
-
-
-
 
 
 class SpacingMod(Mod):
@@ -3086,7 +2957,6 @@ class SpacingMod(Mod):
             if self.opts.init:
                 self.create_gnuplot_environment()
             self.create_data_files()
-
 
     def parse_local_options(self):
         self.ids = False
@@ -3133,7 +3003,6 @@ class SpacingMod(Mod):
         sys.stderr.write("# connection: %s (data flow: %s, ACK flow: %s)\n" %
                 (self.connection_id, self.data_flow_id, self.ack_flow_id))
 
-
     def create_gnuplot_environment(self):
         gnuplot_filename = "spacing.gpi"
         makefile_filename = "Makefile"
@@ -3148,7 +3017,6 @@ class SpacingMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_options(self):
         if not self.opts.outputdir:
             self.logger.error("No output directory specified: --output-dir")
@@ -3159,7 +3027,6 @@ class SpacingMod(Mod):
                     (self.opts.outputdir))
             sys.exit(ExitCodes.EXIT_CMD_LINE)
 
-
     def create_data_files(self):
         self.tx_filepath = "%s/%s" % (self.opts.outputdir, "tx.data")
         self.tx_file = open(self.tx_filepath, 'w')
@@ -3167,11 +3034,9 @@ class SpacingMod(Mod):
         self.rx_filepath = "%s/%s" % (self.opts.outputdir, "rx.data")
         self.rx_file = open(self.rx_filepath, 'w')
 
-
     def close_data_files(self):
         self.tx_file.close()
         self.rx_file.close()
-
 
     def process_data_flow(self, ts, packet):
         pi = TcpPacketInfo(packet)
@@ -3179,21 +3044,17 @@ class SpacingMod(Mod):
         data = (pi.seq, ts, packet)
         self.packet_sequence.append(data)
 
-
     def process_ack_flow(self, ts, packet):
         pi = TcpPacketInfo(packet)
         for i in list(self.packet_sequence):
             if pi.ack >= i[0]:
                 self.packet_sequence.remove(i)
 
-
     def gnuplot_out(self, time, delta, is_data_flow):
         if is_data_flow:
             self.tx_file.write("%.5f %.5f\n" % (time, delta))
         else:
             self.rx_file.write("%.5f %.5f\n" % (time, delta))
-
-
 
     def stdio_out(self, time, delta, is_data_flow):
         if is_data_flow:
@@ -3202,7 +3063,6 @@ class SpacingMod(Mod):
             pre = "RX"
 
         sys.stdout.write("%s %.5f %.5f\n" % (pre, time, delta))
-
 
     def pre_process_packet(self, ts, packet):
         sub_connection = self.cc.sub_connection_by_packet(packet)
@@ -3261,23 +3121,17 @@ class SpacingMod(Mod):
         else:
             self.rx_time_samples = list()
 
-
     def process_final(self):
         if not self.opts.stdio:
             self.close_data_files()
 
 
-
-
-
 class ShowMod(Mod):
-
 
     def initialize(self):
         self.parse_local_options()
         self.color_iter = self.color.__iter__()
         self.packet_no = 0
-
 
     def parse_local_options(self):
         self.ids = False
@@ -3332,8 +3186,6 @@ class ShowMod(Mod):
         elif self.opts.color == "none":
             self.color = RainbowColor(mode=RainbowColor.DISABLE)
 
-
-
     # this provides an sandbox where the variables
     # are made public, this a match can be coded
     # as "sackblocks > 2" instead of
@@ -3387,7 +3239,6 @@ class ShowMod(Mod):
 
         # dont change the color if nothing happends
         return self.color.color_palette['end']
-
 
     def seq_plus(self, seq, length):
         return seq + length
@@ -3451,7 +3302,6 @@ class ShowMod(Mod):
 
         sys.stdout.write(line)
 
-
     def pre_process_final(self):
         pass
 
@@ -3488,7 +3338,6 @@ class SoundMod(Mod):
             self.duration   = 0.0
             self.file       = wave.open(filename, 'wb')
 
-
         def add_sample(self, frequency, duration, volume=1.0):
             samples = int(float(duration) * self.samplerate)
 
@@ -3502,7 +3351,6 @@ class SoundMod(Mod):
 
             self.signal += ''.join((wave.struct.pack('h', item) for item in signal))
             self.duration += duration
-
 
         def close(self):
             samples = int(float(self.duration) * self.samplerate)
@@ -3527,7 +3375,6 @@ class SoundMod(Mod):
         if not wave:
             self.logger.error("Python wave module not installed - but required for sound")
             sys.exit(ExitCodes.EXIT_CMD_LINE)
-
 
     def parse_local_options(self):
         self.ids = False
@@ -3580,7 +3427,6 @@ class SoundMod(Mod):
 
         self.wg = SoundMod.WaveGenerator(self.opts.filename)
 
-
     def bound(self, duration):
         if self.opts.duration_min:
             duration = max(self.opts.duration_min, duration)
@@ -3588,7 +3434,6 @@ class SoundMod(Mod):
             duration = min(self.opts.duration_max, duration)
 
         return duration
-
 
     def data_frequency(self):
         self.frequency_data += SoundMod.FREQUENCY_STEP
@@ -3602,12 +3447,10 @@ class SoundMod(Mod):
             self.frequency_ack = SoundMod.FREQUENCY_ACK_START
         return self.frequency_ack
 
-
     def calc_duration(self, packet):
         packet_len = (len(packet) + Info.ETHERNET_HEADER_LEN) * 8
         duration = 1.0 / (float(self.opts.link_bandwidth) / packet_len)
         return duration
-
 
     def add_silence(self, time):
         if not len(self.packet_db): return
@@ -3626,7 +3469,6 @@ class SoundMod(Mod):
         sample.end   = time
         self.packet_db.append(sample)
 
-
     def account_packet(self, time, is_data_flow, packet):
         # if required (mostly), add silence period
         self.add_silence(time)
@@ -3640,7 +3482,6 @@ class SoundMod(Mod):
         sample.start = time
         sample.end   = time + self.calc_duration(packet)
         self.packet_db.append(sample)
-
 
     def pre_process_packet(self, ts, packet):
         sub_connection = self.cc.sub_connection_by_packet(packet)
@@ -3658,7 +3499,6 @@ class SoundMod(Mod):
 
         self.account_packet(time, is_data_flow, packet)
 
-
     def format_period(self, period):
         if period == SoundMod.PERIOD_DATA:
             return "DATA"
@@ -3666,7 +3506,6 @@ class SoundMod(Mod):
             return " ACK"
         if period == SoundMod.PERIOD_GAP:
             return " GAP"
-
 
     def finish(self):
 
@@ -3705,7 +3544,6 @@ class SoundMod(Mod):
                 (times[SoundMod.PERIOD_DATA][1], times[SoundMod.PERIOD_ACK][1],
                     times[SoundMod.PERIOD_GAP][1]))
 
-
     def process_final(self):
         self.finish()
         self.wg.close()
@@ -3716,7 +3554,6 @@ class SoundMod(Mod):
         sys.stderr.write("# ffmpeg -i packets.wav -vn -acodec libmp3lame packets.mp3\n")
         sys.stderr.write("# wav -> Ogg Vorbis\n")
         sys.stderr.write("# ffmpeg -i packets.wav -f ogg -acodec libvorbis -ab 192k packets.ogg\n")
-
 
 
 class StatisticMod(Mod):
@@ -3761,12 +3598,10 @@ class StatisticMod(Mod):
         "tl-iats-avg": [ "TCP packet inter-arrival times (avg)", "microseconds", 0],
     }
 
-
     def initialize(self):
         self.color = RainbowColor(mode=RainbowColor.ANSI)
         self.parse_local_options()
         self.capture_level = CaptureLevel.NETWORK_LAYER
-
 
     def parse_local_options(self):
         parser = optparse.OptionParser()
@@ -3801,7 +3636,6 @@ class StatisticMod(Mod):
         self.captcp.pcap_file_path = args[2]
         self.logger.info("pcapfile: \"%s\"" % self.captcp.pcap_file_path)
 
-
     def check_new_subconnection(self, sc):
         if len(sc.user_data): return
 
@@ -3823,22 +3657,17 @@ class StatisticMod(Mod):
         sc.user_data["_flow_time_start"] = None
         sc.user_data["_flow_time_end"]   = None
 
-
     def type_to_label(self, label):
         return self.LABEL_DB[label][StatisticMod.LABEL_DB_INDEX_DESCRIPTION]
-
 
     def right(self, text, width):
         return text[:width].rjust(width)
 
-
     def center(self, text, width):
         return text[:width].center(width)
 
-
     def left(self, text, width):
         return text[:width].ljust(width)
-
 
     def calc_max_label_length(self):
         max_label_length = 0
@@ -3848,7 +3677,6 @@ class StatisticMod(Mod):
 
         return max_label_length + 3
 
-
     def calc_max_data_length(self, statistic):
         max_data_length = 0
         index = StatisticMod.LABEL_DB_INDEX_UNIT
@@ -3857,7 +3685,6 @@ class StatisticMod(Mod):
                     len(str(statistic.user_data[i])) + len(self.LABEL_DB[i][index]))
 
         return max_data_length + 1
-
 
     def account_general_data(self, packet):
         if type(packet) == dpkt.ip.IP:
@@ -3886,7 +3713,6 @@ class StatisticMod(Mod):
             self.cc.statistic.packets_tl_unknown += 1
             raise PacketNotSupportedException()
 
-
     def account_general_tcp_data(self, sc, ts, packet):
         sc.user_data["packets-packets"] += 1
 
@@ -3902,7 +3728,6 @@ class StatisticMod(Mod):
         sc.user_data["_flow_time_end"] = ts
 
         self.cc.statistic.packets_processed += 1
-
 
     def rexmt_final(self, sc):
         # called at the end of traxing to check values
@@ -3939,7 +3764,6 @@ class StatisticMod(Mod):
             # precision of .2
             sc.user_data["duration-timedelta"] = "%.2f" % sc.user_data["duration-timedelta"]
 
-
     def account_rexmt(self, sc, packet, pi, ts):
         data_len = int(len(packet.data.data))
         transport_len = int(len(packet.data))
@@ -3973,11 +3797,9 @@ class StatisticMod(Mod):
         # now account rexmt bytes, we add one to take care
         sc.user_data["rexmt-data-bytes"] += data_len
 
-
     def account_pure_ack(self, sc, packet, pi):
         if pi.is_ack_flag() and int(len(packet.data.data)) == 0:
             sc.user_data["pure-ack-packets"] += 1
-
 
     def account_evil_bits(self, sc, packet, pi):
         if pi.is_psh_flag():
@@ -3987,12 +3809,10 @@ class StatisticMod(Mod):
         if pi.is_cwr_flag():
                 sc.user_data["cwr-flag-set-packets"] += 1
 
-
     def account_tcp_data(self, sc, ts, packet, pi):
         self.account_rexmt(sc, packet, pi, ts)
         self.account_evil_bits(sc, packet, pi)
         self.account_pure_ack(sc, packet, pi)
-
 
     def pre_process_packet(self, ts, packet):
         try:
@@ -4012,10 +3832,8 @@ class StatisticMod(Mod):
         pi = TcpPacketInfo(packet)
         self.account_tcp_data(sc, ts, packet, pi)
 
-
     def print_one_column_sc_statistic(self, cid, sc):
         raise NotImplementedException("one flow connection not supported yet")
-
 
     def print_format_two_column(self, cid, statistic):
         sc1 = statistic[0]
@@ -4095,7 +3913,6 @@ class StatisticMod(Mod):
             sys.stdout.write("   %s   %s\n" %
                     (self.left("%s %s" % (l1, r1), line_length),
                      self.left("%s %s" % (l2, r2), line_length)))
-
 
     def format_human(self):
         one_percent = float(self.cc.statistic.packets_processed) / 100
@@ -4182,7 +3999,6 @@ class StatisticMod(Mod):
 
             sys.stdout.write("\n")
 
-
     def not_limited(self, connection):
         res = list()
 
@@ -4216,7 +4032,6 @@ class StatisticMod(Mod):
         if False in res: return True
         return False
 
-
     def format_machine(self):
         for key in self.cc.container.keys():
             connection = self.cc.container[key]
@@ -4228,8 +4043,6 @@ class StatisticMod(Mod):
                 if self.not_limited(connection.sc2):
                     sys.stdout.write(self.opts.format % (connection.sc2.user_data))
                     sys.stdout.write("\n")
-
-
 
     def process_final_data(self):
         # first we sort in an separate dict
@@ -4245,11 +4058,9 @@ class StatisticMod(Mod):
             if connection.sc2:
                 self.rexmt_final(connection.sc2)
 
-
     def process_final(self):
         self.process_final_data()
         self.format_machine() if self.opts.format else self.format_human()
-
 
 
 class ConnectionAnimationMod(Mod):
@@ -4266,20 +4077,16 @@ class ConnectionAnimationMod(Mod):
         self.rtt_data = dict()
         self.acceleration = 0.001
 
-
     def write_js_header(self):
         js_filepath = "%s/%s" % (self.opts.outputdir, "data.js")
         self.js_fd = open(js_filepath, 'w')
         self.js_fd.write("var image_path = \"images/old-computer.png\"\n")
         self.js_fd.write("function main() {\n\n")
 
-
-
     def create_html_environment(self):
         path = "%s/data/connection-animation-data/" % \
                (os.path.dirname(os.path.realpath(__file__)))
         distutils.dir_util.copy_tree(path, self.opts.outputdir)
-
 
     def check_options(self):
         if not self.opts.outputdir:
@@ -4290,7 +4097,6 @@ class ConnectionAnimationMod(Mod):
             self.logger.error("Not a valid directory: \"%s\"" %
                     (self.opts.outputdir))
             sys.exit(ExitCodes.EXIT_CMD_LINE)
-
 
     def parse_local_options(self):
         self.ids = False
@@ -4341,7 +4147,6 @@ class ConnectionAnimationMod(Mod):
         self.logger.error("connection: %s (local flow: %s, remote flow: %s)" %
                 (self.connection_id, self.local_flow_id, self.remote_flow_id))
 
-
     def calc_rtt(self, ts, packet, tpi):
         if not tpi.is_syn_flag():
             return
@@ -4362,7 +4167,6 @@ class ConnectionAnimationMod(Mod):
             self.rtt_data["twh-delay"] *= 0.9
             self.logger.debug("add 20%% buffer %.3f ms " % (self.rtt_data["twh-delay"]))
 
-
     def process_local_side(self, ts, packet, tpi):
         """ we animate the packet send from us to the peer """
         if not self.rtt_data.has_key("twh-delay"):
@@ -4374,7 +4178,6 @@ class ConnectionAnimationMod(Mod):
         self.js_fd.write("\t//ts: %s\n" % (td))
         self.js_fd.write("\tregister_packet(%d, r1, r2, 'data', %d, %d);\n" %
                          (td, len(packet) / 2, self.rtt_data["twh-delay"] / self.acceleration))
-
 
     def process_remote_side(self, ts, packet, tpi):
         """ we animate the packet send from remote to us """
@@ -4388,9 +4191,6 @@ class ConnectionAnimationMod(Mod):
                          ((td - (self.rtt_data["twh-delay"] / \
                           self.acceleration)), len(packet) / 2, \
                           self.rtt_data["twh-delay"] / self.acceleration))
-
-
-
 
     def pre_process_packet(self, ts, packet):
         if not PacketInfo.is_tcp(packet):
@@ -4411,13 +4211,11 @@ class ConnectionAnimationMod(Mod):
 
         self.calc_rtt(ts, packet, tpi)
 
-
     def pre_process_final(self):
         return
         # FIXME
         if self.first_packt_in_flow == int(self.remote_flow_id):
             self.reference_time += self.rtt_data["twh-delay"]
-
 
     def process_packet(self, ts, packet):
         if not PacketInfo.is_tcp(packet):
@@ -4440,7 +4238,6 @@ class ConnectionAnimationMod(Mod):
         else:
             raise InternalException
 
-
     def process_final(self):
         self.js_fd.write("}\n")
         self.js_fd.close()
@@ -4448,14 +4245,9 @@ class ConnectionAnimationMod(Mod):
                 (self.opts.outputdir))
 
 
-
-
 class SocketStatisticsMod(Mod):
 
-
-    class TimelineEvent:
-        pass
-
+    class TimelineEvent: pass
 
     class SsConnection:
         def __init__(self):
@@ -4475,7 +4267,6 @@ class SocketStatisticsMod(Mod):
     def timedelta_to_milli(self, td):
         return td.microseconds / 1000.0 + (td.seconds + td.days * 86400) * 1000
 
-
     def create_data_dir(self, name):
         path = os.path.join(self.opts.outputdir, name)
         if os.path.exists(path):
@@ -4490,7 +4281,6 @@ class SocketStatisticsMod(Mod):
         self.logger.info("create directory for connection %s" % (path))
         os.makedirs(path)
         return path
-
 
     def create_gnuplot_env_rtt(self, path):
         gnuplot_filename = "ss-rtt.gpi"
@@ -4537,13 +4327,11 @@ class SocketStatisticsMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_rtt_env(self, full_path):
         if os.path.exists(full_path):
             return
         os.makedirs(full_path)
         self.create_gnuplot_env_rtt(full_path)
-
 
     def write_rtt(self, path, time_delta, rtt, rtt_var, rto):
         full_path = os.path.join(path, "rtt")
@@ -4561,7 +4349,6 @@ class SocketStatisticsMod(Mod):
 
         with open(rto_data_path, "a") as fd:
             fd.write("%s %s\n" %(time_delta, rto))
-
 
     def create_gnuplot_env_cwnd_ssthresh(self, path):
         gnuplot_filename = "ss-cwnd-ssthresh.gpi"
@@ -4608,13 +4395,11 @@ class SocketStatisticsMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_cwnd_ssthresh_env(self, full_path):
         if os.path.exists(full_path):
             return
         os.makedirs(full_path)
         self.create_gnuplot_env_cwnd_ssthresh(full_path)
-
 
     def write_cwnd_ssthresh(self, path, time_delta, cwnd, ssthresh):
         full_path = os.path.join(path, "cwnd-ssthresh")
@@ -4630,7 +4415,6 @@ class SocketStatisticsMod(Mod):
         if ssthresh:
             with open(ssthresh_data_path, "a") as fd:
                 fd.write("%s %s\n" %(time_delta, ssthresh))
-
 
     def create_gnuplot_env_skmem(self, path):
         gnuplot_filename = "ss-skmem.gpi"
@@ -4677,13 +4461,11 @@ class SocketStatisticsMod(Mod):
         fd.write("%s" % (TemplateMod().get_content_by_name("gnuplot")))
         fd.close()
 
-
     def check_skmem_env(self, full_path):
         if os.path.exists(full_path):
             return
         os.makedirs(full_path)
         self.create_gnuplot_env_skmem(full_path)
-
 
     def write_skmem(self, path, time_delta, skmem):
         full_path = os.path.join(path, "skmem")
@@ -4715,7 +4497,6 @@ class SocketStatisticsMod(Mod):
         with open(optmem_data_path, "a") as fd:
             fd.write("%s %s\n" %(time_delta, skmem["SK_MEMINFO_OPTMEM"]))
 
-
     def write_data_files(self, path, time_delta, data):
         # convert msec time delta to seconds
         time_delta_sec = "%.3f" % (float(time_delta) / 1000.0)
@@ -4727,7 +4508,6 @@ class SocketStatisticsMod(Mod):
             self.write_cwnd_ssthresh(path, time_delta_sec, cwnd, ssthresh)
         if "skmem" in data:
             self.write_skmem(path, time_delta_sec, data["skmem"])
-
 
     def write_db(self):
         for key, value in self.db.items():
@@ -4741,13 +4521,11 @@ class SocketStatisticsMod(Mod):
                 time_delta = self.timedelta_to_milli(time - value.start)
                 self.write_data_files(path, time_delta, event.data)
             
-
     def execute_ss(self):
         cmd = ["ss", "-i", "-m", "-e", "-t", "-n"]
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None)
         out, err = p.communicate()
         return out
-
 
     def connection_handle(self, local_addr, peer_addr):
         key = "%s-%s" % (local_addr, peer_addr)
@@ -4756,7 +4534,6 @@ class SocketStatisticsMod(Mod):
             self.db[key].start()
         return self.db[key]
 
-    
     def parse_std_line(self, std):
         retdata = dict()
         timer_info = uid = None
@@ -4803,7 +4580,6 @@ class SocketStatisticsMod(Mod):
             retdata["sk"]         = std[8]
 
         return retdata
-
 
     def parse_skmem(self, data):
         d = dict()
@@ -4854,9 +4630,6 @@ class SocketStatisticsMod(Mod):
             d["SK_MEMINFO_FWD_ALLOC"] = 0
 
         return d
-
-
-
 
     def parse_ext_line(self, ext):
         d = dict()
@@ -4927,7 +4700,6 @@ class SocketStatisticsMod(Mod):
 
         return d
 
-
     def account_connection(self, std, ext):
         new_data = dict()
 
@@ -4944,7 +4716,6 @@ class SocketStatisticsMod(Mod):
         handle = self.connection_handle(std_data["local_addr"], std_data["peer_addr"])
         snapshot = handle.snapshot()
         snapshot.data = new_data
-
 
     def process_data(self, ss_output):
         # split into lines, remove tabs and empty 
@@ -4970,7 +4741,6 @@ class SocketStatisticsMod(Mod):
             ext = lines[i + 1]
             self.account_connection(std, ext)
 
-
     def initialize(self):
         if not sys.platform.startswith('linux'):
             sys.stderr.write("SocketStatistics only supported under Linux - sorry\n")
@@ -4982,7 +4752,6 @@ class SocketStatisticsMod(Mod):
         self.parse_local_options()
         self.db = dict()
         self.sleep_time = 1.0 / self.opts.sampling_rate
-
 
     def prepare_gnuplot_options(self):
         if not self.opts.gnuplotoptions:
@@ -5023,7 +4792,6 @@ class SocketStatisticsMod(Mod):
             "title" in self.opts.gnuplotoptions):
             raise ArgumentException("Gnuplot title AND no-title options are not allowed")
 
-
     def check_options(self):
         if not self.opts.outputdir:
             self.logger.error("No output directory specified: --output-dir <directory>")
@@ -5033,8 +4801,6 @@ class SocketStatisticsMod(Mod):
             self.logger.error("Not a valid directory: \"%s\"" %
                     (self.opts.outputdir))
             sys.exit(ExitCodes.EXIT_CMD_LINE)
-
-
 
     def parse_local_options(self):
         self.width = self.height = 0
@@ -5058,14 +4824,12 @@ class SocketStatisticsMod(Mod):
                 type="string", help="options for gnuplot, comma separated list: notitle, "
                 "title=\"<newtitle>\", size-ratio=<float>")
 
-
         self.opts, args = parser.parse_args(sys.argv[0:])
         self.set_opts_logevel()
 
         self.captcp.print_welcome()
         self.prepare_gnuplot_options()
         self.check_options()
-
 
     def process_final(self):
 
@@ -5104,13 +4868,11 @@ class Captcp:
        "socketstatistic": [ "SocketStatisticsMod", "Graph output (mem, rtt, ...) from ss(8) over time" ]
             }
 
-
     def __init__(self):
         self.captcp_starttime = datetime.datetime.today()
         self.setup_logging()
         self.pcap_filter = None
         self.pcap_file_path = False
-
 
     def setup_logging(self):
         ch = logging.StreamHandler()
@@ -5122,7 +4884,6 @@ class Captcp:
         self.logger.setLevel(logging.WARNING)
         self.logger.addHandler(ch)
 
-
     def which(self, program):
         for path in os.environ["PATH"].split(os.pathsep):
             path = path.strip('"')
@@ -5130,7 +4891,6 @@ class Captcp:
             if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
                 return full_path
         return None
-
 
     def check_program(self, program):
         status = "FAILED"
@@ -5143,8 +4903,6 @@ class Captcp:
         required = "Required" if program["required"] else "Optional"
         help     = "" if not program["help"] else program["help"]
         sys.stdout.write("%-6s %-10s Need: %7s   Path: %-20s  Help: %s\n" % (status, program["name"], required, path, help))
-
-
 
     def check_environment(self):
         programs = [
@@ -5166,17 +4924,14 @@ class Captcp:
         sys.stdout.write("Check programs:\n")
         for program in programs:
             self.check_program(program)
-        
 
     def print_version(self):
         sys.stdout.write("%s\n" % (__version__))
-
 
     def print_usage(self):
         sys.stderr.write("Usage: captcp [-h | --help]" +
                          " [--version]" +
                          " <modulename> [<module-options>] <pcap-file>\n")
-
 
     def print_welcome(self):
         major, minor, micro, releaselevel, serial = sys.version_info
@@ -5185,18 +4940,15 @@ class Captcp:
         self.logger.info("python: %s.%s.%s [releaselevel: %s, serial: %s]" %
                 (major, minor, micro, releaselevel, serial))
 
-
     def print_modules(self):
         for i in Captcp.modes.keys():
             sys.stderr.write("   %-15s - %s\n" % (i, Captcp.modes[i][1]))
-
 
     def args_contains(self, argv, *cmds):
         for cmd in cmds:
             for arg in argv:
                 if arg == cmd: return True
         return False
-
 
     def parse_global_otions(self):
         if len(sys.argv) <= 1:
@@ -5236,7 +4988,6 @@ class Captcp:
         classname = Captcp.modes[submodule][0]
         return classname
 
-
     def check_pcap_filepath_sanity(self):
         statinfo = os.stat(self.pcap_file_path)
         if statinfo.st_size == 0:
@@ -5244,7 +4995,6 @@ class Captcp:
                               (self.pcap_file_path))
             return False
         return True
-
 
     def run(self):
         classtring = self.parse_global_otions()
@@ -5279,7 +5029,6 @@ class Captcp:
             pcap_parser.run()
             del pcap_parser
 
-
         self.logger.debug("call pre_process_final [4/4]")
         ret = classinstance.process_final()
 
@@ -5291,10 +5040,10 @@ class Captcp:
         return ret
 
 
-
 if __name__ == "__main__":
     try:
         captcp = Captcp()
         sys.exit(captcp.run())
     except KeyboardInterrupt:
         sys.stderr.write("SIGINT received, exiting\n")
+
