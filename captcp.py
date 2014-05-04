@@ -720,6 +720,8 @@ class TcpPacketInfo(PacketInfo):
             ret += "mss: %d" % (self.options['mss'])
         if self.options['wsc']:
             ret += "wsc: %d" % (self.options['wsc'])
+        if self.options['tsval']:
+            ret += "ts: %d" % (self.options['tsval'])
         if self.options['tsval'] and self.options['tsecr']:
             ret += "ts: %d:%d" % (self.options['tsval'], self.options['tsecr'])
         if self.options['sackok']:
@@ -763,7 +765,10 @@ class TcpPacketInfo(PacketInfo):
                 ofmt="!%sI" % int(len(d) / 4)
                 self.options['sackblocks'] = self.linear_sackblocks_array(list(struct.unpack(ofmt, d)))
             elif o == dpkt.tcp.TCP_OPT_TIMESTAMP:
-                (self.options['tsval'], self.options['tsecr']) = struct.unpack('>II', d)
+                if len(d) < 5:
+                        (self.options['tsval']) = struct.unpack('>I', d)
+                elif len(d) > 7:
+                        (self.options['tsval'], self.options['tsecr']) = struct.unpack('>II', d)
 
             opts.append(o)
 
